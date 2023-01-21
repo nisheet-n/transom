@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Transom (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Transom (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
