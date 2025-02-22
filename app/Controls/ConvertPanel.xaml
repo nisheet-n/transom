@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Transom.Controls.ConvertPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Width="340" Spacing="10">
+        <Grid>
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Convert" />
+            <TextBlock
+                x:Name="SourceNote"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}" />
+        </Grid>
+
+        <SelectorBar x:Name="Tabs" SelectionChanged="Tabs_SelectionChanged">
+            <SelectorBarItem x:Name="CurrencyTab" IsSelected="True" Tag="currency" Text="Currency" />
+            <SelectorBarItem x:Name="UnitsTab" Tag="units" Text="Units" />
+            <SelectorBarItem Tag="time" Text="Time zones" />
+        </SelectorBar>
+
+        <StackPanel x:Name="CurrencyView" Spacing="6">
+            <StackPanel x:Name="CurrencyRows" Spacing="2" />
+            <TextBox x:Name="CurrencySearch" PlaceholderText="Add a currency, e.g. CAD or Swiss" TextChanged="CurrencySearch_TextChanged" />
+            <StackPanel x:Name="CurrencySuggestions" Spacing="2" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextWrapping="Wrap">
+                <Run Text="Rates by" />
+                <Hyperlink NavigateUri="https://www.exchangerate-api.com">ExchangeRate-API</Hyperlink>
+                <Run x:Name="RatesUpdated" />
+            </TextBlock>
+        </StackPanel>
+
+        <StackPanel x:Name="UnitsView" Spacing="6" Visibility="Collapsed">
+            <TextBox x:Name="UnitInput" PlaceholderText="Type a value, e.g. 5 ft, 30 °C, 2 GB" TextChanged="UnitInput_TextChanged" />
+            <TextBlock
+                x:Name="UnitHint"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Works with length, weight, temperature, volume, speed and data sizes."
+                TextWrapping="Wrap" />
+            <StackPanel x:Name="UnitRows" Spacing="2" />
+        </StackPanel>
+
+        <StackPanel x:Name="TimeView" Spacing="6" Visibility="Collapsed">
+            <StackPanel x:Name="TimeRows" Spacing="2" />
+            <TextBox x:Name="TimeSearch" PlaceholderText="Add a city or time zone" TextChanged="TimeSearch_TextChanged" />
+            <StackPanel x:Name="TimeSuggestions" Spacing="2" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>
