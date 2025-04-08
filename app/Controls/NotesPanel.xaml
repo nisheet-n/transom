@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Transom.Controls.NotesPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Width="340" Spacing="10">
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Quick notes" />
+            <StackPanel
+                x:Name="SavedIndicator"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="4"
+                Visibility="Collapsed">
+                <FontIcon FontSize="11" Foreground="{ThemeResource SystemFillColorSuccessBrush}" Glyph="&#xE73E;" />
+                <TextBlock Foreground="{ThemeResource TextFillColorTertiaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Saved" />
+            </StackPanel>
+            <Button
+                Grid.Column="2"
+                Padding="8,4"
+                Click="NewNote_Click"
+                ToolTipService.ToolTip="New note (Win+Alt+N)">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontSize="12" Glyph="&#xE710;" />
+                    <TextBlock Text="New" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <TextBox
+            x:Name="Editor"
+            Height="190"
+            AcceptsReturn="True"
+            FontSize="14"
+            PlaceholderText="Write something. The first line becomes the title."
+            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            TextChanged="Editor_TextChanged"
+            TextWrapping="Wrap" />
+        <TextBlock
+            x:Name="EditorInfo"
+            Margin="2,-4,0,0"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="Saved on this PC as you type" />
+
+        <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+        <TextBox x:Name="Search" PlaceholderText="Search notes" TextChanged="Search_TextChanged" />
+        <ScrollViewer MaxHeight="300">
+            <StackPanel x:Name="NoteList" Spacing="2" />
+        </ScrollViewer>
+        <TextBlock
+            x:Name="EmptyText"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Your notes will appear here."
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>
