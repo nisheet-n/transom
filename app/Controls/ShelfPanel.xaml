@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Transom.Controls.ShelfPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AllowDrop="True"
+    DragOver="Panel_DragOver"
+    Drop="Panel_Drop">
+    <StackPanel Width="340" Spacing="10">
+        <Grid>
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Shelf" />
+            <TextBlock
+                x:Name="Summary"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}" />
+        </Grid>
+
+        <Border
+            x:Name="DropZone"
+            Padding="14,12"
+            BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+            BorderThickness="1.5"
+            CornerRadius="10">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                    VerticalAlignment="Center"
+                    FontSize="20"
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Glyph="&#xE7B8;" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock FontWeight="SemiBold" Text="Drop files here to park them" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="Drag them out later into any folder or app"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+                <Button
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Click="AddFiles_Click"
+                    Content="Add" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer MaxHeight="340">
+            <StackPanel x:Name="ItemList" Spacing="2" />
+        </ScrollViewer>
+
+        <Grid x:Name="Footer">
+            <TextBlock
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Drag out to copy. Files stay where they are." />
+            <HyperlinkButton
+                Padding="6,2"
+                HorizontalAlignment="Right"
+                Click="Clear_Click"
+                Content="Clear" />
+        </Grid>
+    </StackPanel>
+</UserControl>
