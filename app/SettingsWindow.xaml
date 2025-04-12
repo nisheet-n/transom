@@ -18,6 +18,16 @@
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
             </Style>
+            <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
+                <Setter Property="Margin" Value="0,4,0,14" />
+            </Style>
+            <Style x:Key="GroupTitle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Margin" Value="0,18,0,4" />
+            </Style>
+            <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -30,139 +40,443 @@
             </TitleBar.IconSource>
         </TitleBar>
 
-        <ScrollViewer Grid.Row="1">
-            <StackPanel MaxWidth="780" Padding="28,4,28,28" Spacing="6">
-                <TextBlock Margin="0,4,0,14" Style="{StaticResource TitleTextBlockStyle}" Text="Appearance" />
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            OpenPaneLength="220"
+            PaneDisplayMode="Left"
+            SelectionChanged="Nav_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Appearance" Tag="appearance">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE771;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Dock" Tag="dock">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Tools" Tag="tools">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE71D;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Privacy" Tag="privacy">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE72E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
 
-                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Rail background" />
-                <TextBlock
-                    Margin="0,0,0,6"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="Changes show on the rail right away." />
+            <ScrollViewer>
+                <Grid MaxWidth="820" Padding="32,8,32,32" HorizontalAlignment="Stretch">
 
-                <GridView
-                    x:Name="StyleGrid"
-                    ItemsSource="{x:Bind Styles}"
-                    SelectionChanged="StyleGrid_SelectionChanged"
-                    SelectionMode="Single">
-                    <GridView.ItemTemplate>
-                        <DataTemplate x:DataType="models:StyleOption">
-                            <StackPanel Width="164" Padding="6" Spacing="6">
-                                <Border
-                                    Height="60"
-                                    Background="{x:Bind Swatch}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6" />
-                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
-                                <TextBlock
-                                    Height="34"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind Hint}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
-                </GridView>
-
-                <StackPanel x:Name="PresetPanel" Margin="0,8,0,0" Spacing="8">
-                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Preset color" />
-                    <GridView
-                        x:Name="PresetGrid"
-                        ItemsSource="{x:Bind Presets}"
-                        SelectionChanged="PresetGrid_SelectionChanged"
-                        SelectionMode="Single">
-                        <GridView.ItemTemplate>
-                            <DataTemplate x:DataType="models:PresetOption">
-                                <StackPanel Width="72" Padding="4" Spacing="6">
-                                    <Ellipse
-                                        Width="40"
-                                        Height="40"
-                                        HorizontalAlignment="Center"
-                                        Fill="{x:Bind Swatch}"
-                                        Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
-                                    <TextBlock
-                                        HorizontalAlignment="Center"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="{x:Bind Name}" />
+                    <StackPanel x:Name="GeneralPage" Spacing="6">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="General" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Start Transom with Windows" />
+                                    <TextBlock x:Name="StartupHint" Style="{StaticResource Hint}" Text="Open Transom automatically when you sign in." />
                                 </StackPanel>
-                            </DataTemplate>
-                        </GridView.ItemTemplate>
-                    </GridView>
-                </StackPanel>
+                                <ToggleSwitch x:Name="StartupToggle" Grid.Column="1" MinWidth="0" Toggled="StartupToggle_Toggled" />
+                            </Grid>
+                        </Border>
 
-                <Border x:Name="CustomPanel" Margin="0,8,0,0" Style="{StaticResource Card}">
-                    <StackPanel Spacing="12">
-                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Custom color" />
-                        <ColorPicker
-                            x:Name="CustomPicker"
-                            ColorChanged="CustomPicker_ColorChanged"
-                            IsAlphaEnabled="False"
-                            IsColorChannelTextInputVisible="False"
-                            IsHexInputVisible="True"
-                            IsMoreButtonVisible="False" />
-                        <Slider
-                            x:Name="OpacitySlider"
-                            Header="Opacity"
-                            Maximum="100"
-                            Minimum="10"
-                            StepFrequency="5"
-                            ValueChanged="OpacitySlider_ValueChanged" />
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Keyboard" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Keyboard navigation" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Ctrl+Alt+1 to 9 opens the rail's items in order, from the first to the ninth." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="NavToggle" Grid.Column="1" MinWidth="0" Toggled="NavToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Shortcuts" />
+                                <Grid ColumnSpacing="12" RowSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock FontFamily="Cascadia Mono, Consolas" Text="Win+Alt+V" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Hint}" Text="Open clipboard history" />
+                                    <TextBlock Grid.Row="1" FontFamily="Cascadia Mono, Consolas" Text="Win+Alt+N" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Hint}" Text="Open quick notes" />
+                                    <TextBlock Grid.Row="2" FontFamily="Cascadia Mono, Consolas" Text="Ctrl+Alt+1…9" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Hint}" Text="Open rail items in order (when keyboard navigation is on)" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
 
-                <TextBlock Margin="0,18,0,4" Style="{StaticResource BodyStrongTextBlockStyle}" Text="More" />
+                    <StackPanel x:Name="AppearancePage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Appearance" />
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Rail background" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Changes show on the rail right away." />
+                        <GridView
+                            x:Name="StyleGrid"
+                            ItemsSource="{x:Bind Styles}"
+                            SelectionChanged="StyleGrid_SelectionChanged"
+                            SelectionMode="Single">
+                            <GridView.ItemTemplate>
+                                <DataTemplate x:DataType="models:StyleOption">
+                                    <StackPanel Width="164" Padding="6" Spacing="6">
+                                        <Border
+                                            Height="60"
+                                            Background="{x:Bind Swatch}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6" />
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
+                                        <TextBlock
+                                            Height="34"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind Hint}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
 
-                <Border Style="{StaticResource Card}">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Rail theme" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="Light or dark rail and icons. Follow taskbar uses your Windows mode." />
+                        <StackPanel x:Name="PresetPanel" Margin="0,8,0,0" Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Preset color" />
+                            <GridView
+                                x:Name="PresetGrid"
+                                ItemsSource="{x:Bind Presets}"
+                                SelectionChanged="PresetGrid_SelectionChanged"
+                                SelectionMode="Single">
+                                <GridView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PresetOption">
+                                        <StackPanel Width="72" Padding="4" Spacing="6">
+                                            <Ellipse
+                                                Width="40"
+                                                Height="40"
+                                                HorizontalAlignment="Center"
+                                                Fill="{x:Bind Swatch}"
+                                                Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                            <TextBlock HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Name}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridView.ItemTemplate>
+                            </GridView>
                         </StackPanel>
-                        <ComboBox
-                            x:Name="ThemeBox"
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            SelectionChanged="ThemeBox_SelectionChanged">
-                            <x:String>Follow taskbar</x:String>
-                            <x:String>Light</x:String>
-                            <x:String>Dark</x:String>
-                        </ComboBox>
-                    </Grid>
-                </Border>
 
-                <Border Style="{StaticResource Card}">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Go solid on battery saver" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="Turns off transparency to save power, like Windows does." />
-                        </StackPanel>
-                        <ToggleSwitch
-                            x:Name="BatteryToggle"
-                            Grid.Column="1"
-                            MinWidth="0"
-                            VerticalAlignment="Center"
-                            Toggled="BatteryToggle_Toggled" />
-                    </Grid>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                        <Border x:Name="CustomPanel" Margin="0,8,0,0" Style="{StaticResource Card}">
+                            <StackPanel Spacing="12">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Custom color" />
+                                <ColorPicker
+                                    x:Name="CustomPicker"
+                                    ColorChanged="CustomPicker_ColorChanged"
+                                    IsAlphaEnabled="False"
+                                    IsColorChannelTextInputVisible="False"
+                                    IsHexInputVisible="True"
+                                    IsMoreButtonVisible="False" />
+                                <Slider
+                                    x:Name="OpacitySlider"
+                                    Header="Opacity"
+                                    Maximum="100"
+                                    Minimum="10"
+                                    StepFrequency="5"
+                                    ValueChanged="OpacitySlider_ValueChanged" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="More" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Rail theme" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Light or dark rail and icons. Follow taskbar uses your Windows mode." />
+                                </StackPanel>
+                                <ComboBox
+                                    x:Name="ThemeBox"
+                                    Grid.Column="1"
+                                    MinWidth="160"
+                                    VerticalAlignment="Center"
+                                    SelectionChanged="ThemeBox_SelectionChanged">
+                                    <x:String>Follow taskbar</x:String>
+                                    <x:String>Light</x:String>
+                                    <x:String>Dark</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Go solid on battery saver" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Turns off transparency to save power, like Windows does." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="BatteryToggle" Grid.Column="1" MinWidth="0" Toggled="BatteryToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="DockPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Dock" />
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Where the rail sits" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="The rail matches your taskbar's thickness on every edge. Panels open toward the middle of the screen." />
+                        <GridView x:Name="DockGrid" SelectionChanged="DockGrid_SelectionChanged" SelectionMode="Single">
+                            <GridViewItem AutomationProperties.Name="Left" Tag="left">
+                                <StackPanel Width="150" Padding="6" Spacing="8">
+                                    <Grid Height="84" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                                        <Rectangle Width="14" HorizontalAlignment="Left" Fill="{ThemeResource AccentFillColorDefaultBrush}" RadiusX="3" RadiusY="3" Margin="4" />
+                                    </Grid>
+                                    <TextBlock HorizontalAlignment="Center" Text="Left" />
+                                </StackPanel>
+                            </GridViewItem>
+                            <GridViewItem AutomationProperties.Name="Right" Tag="right">
+                                <StackPanel Width="150" Padding="6" Spacing="8">
+                                    <Grid Height="84" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                                        <Rectangle Width="14" HorizontalAlignment="Right" Fill="{ThemeResource AccentFillColorDefaultBrush}" RadiusX="3" RadiusY="3" Margin="4" />
+                                    </Grid>
+                                    <TextBlock HorizontalAlignment="Center" Text="Right" />
+                                </StackPanel>
+                            </GridViewItem>
+                            <GridViewItem AutomationProperties.Name="Top" Tag="top">
+                                <StackPanel Width="150" Padding="6" Spacing="8">
+                                    <Grid Height="84" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                                        <Rectangle Height="12" VerticalAlignment="Top" Fill="{ThemeResource AccentFillColorDefaultBrush}" RadiusX="3" RadiusY="3" Margin="4" />
+                                    </Grid>
+                                    <TextBlock HorizontalAlignment="Center" Text="Top" />
+                                </StackPanel>
+                            </GridViewItem>
+                            <GridViewItem AutomationProperties.Name="Bottom" Tag="bottom">
+                                <StackPanel Width="150" Padding="6" Spacing="8">
+                                    <Grid Height="84" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                                        <Rectangle Height="12" VerticalAlignment="Bottom" Fill="{ThemeResource AccentFillColorDefaultBrush}" RadiusX="3" RadiusY="3" Margin="4" />
+                                    </Grid>
+                                    <TextBlock HorizontalAlignment="Center" Text="Bottom" />
+                                </StackPanel>
+                            </GridViewItem>
+                        </GridView>
+                    </StackPanel>
+
+                    <StackPanel x:Name="ToolsPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Tools" />
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Show on the rail" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Turn off the tools you don't use to keep the rail short." />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel x:Name="ToolToggles" Spacing="2" />
+                        </Border>
+
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Clipboard" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="History size" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="How many recent items to keep. Pinned items are always kept." />
+                                </StackPanel>
+                                <ComboBox x:Name="ClipLimitBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="ClipLimitBox_SelectionChanged">
+                                    <x:String>25 items</x:String>
+                                    <x:String>50 items</x:String>
+                                    <x:String>100 items</x:String>
+                                    <x:String>200 items</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Clear history when Transom quits" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Pinned items stay." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="ClearOnQuitToggle" Grid.Column="1" MinWidth="0" Toggled="ClearOnQuitToggle_Toggled" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Reminders and Keep awake" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Snooze length" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Used by the Snooze button on reminder notifications." />
+                                </StackPanel>
+                                <ComboBox x:Name="SnoozeBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="SnoozeBox_SelectionChanged">
+                                    <x:String>5 min</x:String>
+                                    <x:String>10 min</x:String>
+                                    <x:String>15 min</x:String>
+                                    <x:String>30 min</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Keep awake default" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="The duration picked when you open Keep awake." />
+                                </StackPanel>
+                                <ComboBox x:Name="AwakeBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="AwakeBox_SelectionChanged">
+                                    <x:String>30 min</x:String>
+                                    <x:String>1 hour</x:String>
+                                    <x:String>2 hours</x:String>
+                                    <x:String>Until I stop it</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Capture" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Saved screenshots" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Pictures › Transom" />
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Center" Click="OpenScreenshots_Click" Content="Open folder" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PrivacyPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Privacy" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Hide the rail from screenshots and recordings" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="The rail won't appear in screenshots, screen recordings or screen sharing. Useful when it shows your music or reminders." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="HideCaptureToggle" Grid.Column="1" MinWidth="0" Toggled="HideCaptureToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Notice selected text" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Reads the text you select in other apps so prices and units light up Convert and selection actions are ready. Nothing is saved or sent anywhere. Password fields are skipped. VS Code hides its text from this, so there Transom copies the selection for a moment and puts your clipboard back." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="SelectionToggle" Grid.Column="1" MinWidth="0" Toggled="SelectionToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="No telemetry" />
+                                <TextBlock Style="{StaticResource Hint}" Text="Transom doesn't collect or send any usage data. The only internet request it makes is for currency rates, when you open Convert." />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Your data stays on this PC" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Clipboard history, notes, reminders and shelf links are saved only on this PC. Passwords from password managers are never saved." />
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Center" Click="OpenData_Click" Content="Open data folder" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AboutPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="About" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="64" Height="64" Source="Assets/Square150x150Logo.scale-200.png" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="Transom" />
+                                    <TextBlock x:Name="VersionText" Style="{StaticResource Hint}" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="A slim bar on the edge of your screen for media, clipboard, notes and more." />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Credits" />
+                                <TextBlock Style="{StaticResource Hint}">
+                                    <Run Text="Currency rates by" />
+                                    <Hyperlink NavigateUri="https://www.exchangerate-api.com">ExchangeRate-API</Hyperlink>
+                                    <Run Text="." />
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource Hint}" Text="Built with WinUI 3 and .NET." />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Source code" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="github.com/nisheet-n/transom" />
+                                </StackPanel>
+                                <HyperlinkButton Grid.Column="1" VerticalAlignment="Center" Content="Open on GitHub" NavigateUri="https://github.com/nisheet-n/transom" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </NavigationView>
     </Grid>
 </Window>

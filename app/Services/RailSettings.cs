@@ -32,6 +32,15 @@ public sealed class RailSettings
     public List<string> Currencies { get; set; } = [];
     public List<string> TimeZones { get; set; } = ["UTC", "America/New_York", "Europe/London", "Asia/Tokyo"];
     public List<string> PinnedConvert { get; set; } = [];
+    public string Dock { get; set; } = "left";
+    public List<string> HiddenTools { get; set; } = [];
+    public int ClipboardLimit { get; set; } = 50;
+    public bool ClearClipboardOnQuit { get; set; }
+    public int SnoozeMinutes { get; set; } = 5;
+    public int AwakeDefault { get; set; } = 1;
+    public bool HideFromCapture { get; set; }
+    public bool KeyboardNavigation { get; set; }
+    public bool WatchSelection { get; set; } = true;
 
     public void Save()
     {
@@ -47,6 +56,15 @@ public sealed class RailSettings
             values[nameof(Currencies)] = string.Join(",", Currencies);
             values[nameof(TimeZones)] = string.Join(",", TimeZones);
             values[nameof(PinnedConvert)] = string.Join("|", PinnedConvert);
+            values[nameof(Dock)] = Dock;
+            values[nameof(HiddenTools)] = string.Join(",", HiddenTools);
+            values[nameof(ClipboardLimit)] = ClipboardLimit;
+            values[nameof(ClearClipboardOnQuit)] = ClearClipboardOnQuit;
+            values[nameof(SnoozeMinutes)] = SnoozeMinutes;
+            values[nameof(AwakeDefault)] = AwakeDefault;
+            values[nameof(HideFromCapture)] = HideFromCapture;
+            values[nameof(KeyboardNavigation)] = KeyboardNavigation;
+            values[nameof(WatchSelection)] = WatchSelection;
         }
         catch (Exception ex)
         {
@@ -70,6 +88,15 @@ public sealed class RailSettings
             if (values[nameof(Currencies)] is string currencies) settings.Currencies = [.. currencies.Split(',', StringSplitOptions.RemoveEmptyEntries)];
             if (values[nameof(TimeZones)] is string zones) settings.TimeZones = [.. zones.Split(',', StringSplitOptions.RemoveEmptyEntries)];
             if (values[nameof(PinnedConvert)] is string pins) settings.PinnedConvert = [.. pins.Split('|', StringSplitOptions.RemoveEmptyEntries)];
+            if (values[nameof(Dock)] is string dock) settings.Dock = dock;
+            if (values[nameof(HiddenTools)] is string hidden) settings.HiddenTools = [.. hidden.Split(',', StringSplitOptions.RemoveEmptyEntries)];
+            if (values[nameof(ClipboardLimit)] is int limit) settings.ClipboardLimit = limit;
+            if (values[nameof(ClearClipboardOnQuit)] is bool clear) settings.ClearClipboardOnQuit = clear;
+            if (values[nameof(SnoozeMinutes)] is int snooze) settings.SnoozeMinutes = snooze;
+            if (values[nameof(AwakeDefault)] is int awake) settings.AwakeDefault = awake;
+            if (values[nameof(HideFromCapture)] is bool hide) settings.HideFromCapture = hide;
+            if (values[nameof(KeyboardNavigation)] is bool keys) settings.KeyboardNavigation = keys;
+            if (values[nameof(WatchSelection)] is bool watch) settings.WatchSelection = watch;
         }
         catch (Exception ex)
         {

@@ -27,7 +27,6 @@ internal sealed partial class ClipJson : JsonSerializerContext;
 
 public sealed class ClipboardService
 {
-    private const int MaxRecent = 50;
     private const int MaxTextLength = 100_000;
 
     private readonly List<ClipItem> _items;
@@ -161,7 +160,7 @@ public sealed class ClipboardService
 
     private void Trim()
     {
-        foreach (var old in _items.Where(i => !i.Pinned).OrderByDescending(i => i.Copied).Skip(MaxRecent).ToList())
+        foreach (var old in _items.Where(i => !i.Pinned).OrderByDescending(i => i.Copied).Skip(RailSettings.Current.ClipboardLimit).ToList())
         {
             _items.Remove(old);
             DeleteImage(old);

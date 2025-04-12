@@ -22,6 +22,7 @@ internal sealed unsafe class AppBarDock : IDisposable
     public event Action<bool>? FullScreenChanged;
     public event Action? SettingChanged;
     public event Action? ClipboardChanged;
+    public event Action? LaidOut;
     public event Action<int>? HotKeyPressed;
 
     public AppBarDock(nint hwnd, AppWindow appWindow)
@@ -70,15 +71,28 @@ internal sealed unsafe class AppBarDock : IDisposable
         }
 
         var data = NewData();
-        data.uEdge = ABE_LEFT;
-        data.rc = new RECT { Left = area.Left, Top = area.Top, Right = area.Left + thickness, Bottom = area.Bottom };
+        data.uEdge = Edge;
+        data.rc = Strip(area, thickness);
         SHAppBarMessage(ABM_QUERYPOS, ref data);
-        data.rc.Right = data.rc.Left + thickness;
+        data.rc = Strip(data.rc, thickness);
         SHAppBarMessage(ABM_SETPOS, ref data);
 
         _appWindow.MoveAndResize(new RectInt32(data.rc.Left, data.rc.Top, data.rc.Width, data.rc.Height));
         ThicknessChanged?.Invoke(thickness / scale);
+        LaidOut?.Invoke();
     }
+
+    public uint Edge { get; set; } = ABE_LEFT;
+
+    public bool IsHorizontal => Edge is ABE_TOP or ABE_BOTTOM;
+
+    private RECT Strip(RECT area, int thickness) => Edge switch
+    {
+        ABE_RIGHT => area with { Left = area.Right - thickness },
+        ABE_TOP => area with { Bottom = area.Top + thickness },
+        ABE_BOTTOM => area with { Top = area.Bottom - thickness },
+        _ => area with { Right = area.Left + thickness },
+    };
 
     public void Dispose()
     {

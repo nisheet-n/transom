@@ -47,7 +47,7 @@ public static class Notifications
                 .SetScenario(AppNotificationScenario.Reminder)
                 .AddText("Reminder")
                 .AddText(reminder.Text)
-                .AddButton(new AppNotificationButton("Snooze 5 min").AddArgument("action", "snooze").AddArgument("id", reminder.Id))
+                .AddButton(new AppNotificationButton($"Snooze {RailSettings.Current.SnoozeMinutes} min").AddArgument("action", "snooze").AddArgument("id", reminder.Id))
                 .AddButton(new AppNotificationButton("Done").AddArgument("action", "done").AddArgument("id", reminder.Id))
                 .BuildNotification();
             AppNotificationManager.Default.Show(notification);
