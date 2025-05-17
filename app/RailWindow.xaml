@@ -11,6 +11,10 @@
     </Window.SystemBackdrop>
 
     <Grid
+        AllowDrop="True"
+        DragLeave="Root_DragLeave"
+        DragOver="Root_DragOver"
+        Drop="Root_Drop"
         x:Name="Root"
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="0,0,1,0">
@@ -105,7 +109,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel x:Name="TopSlots" Padding="0,6,0,0" Spacing="2">
-            <Button x:Name="ArtButton" Style="{StaticResource Slot}" ToolTipService.ToolTip="Nothing playing">
+            <Button x:Name="ArtButton" Style="{StaticResource Slot}" AutomationProperties.Name="Media" ToolTipService.ToolTip="Nothing playing">
                 <Grid x:Name="ArtHost" Width="28" Height="28">
                     <Border
                         x:Name="ArtPlaceholder"
@@ -285,7 +289,7 @@
                 Click="PlayPause_Click"
                 IsEnabled="False"
                 Style="{StaticResource Slot}"
-                ToolTipService.ToolTip="Play">
+                AutomationProperties.Name="Play or pause" ToolTipService.ToolTip="Play">
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
                         <Path x:Name="PlayGlyph" Fill="{ThemeResource TextFillColorPrimaryBrush}" Data="M7 4.5 L7 19.5 L20 12 Z" />
@@ -298,16 +302,120 @@
                 </Viewbox>
             </Button>
 
-            <Rectangle Style="{StaticResource Sep}" />
+            <Rectangle x:Name="SepMedia" Style="{StaticResource Sep}" />
 
-            <Button Opacity="0.45" Style="{StaticResource Slot}" ToolTipService.ToolTip="Ask AI · coming soon">
-                <Viewbox Width="20" Height="20">
-                    <Canvas Width="24" Height="24">
-                        <Path Style="{StaticResource Glyph}" Data="M12 3 L13.9 8.1 L19 10 L13.9 11.9 L12 17 L10.1 11.9 L5 10 L10.1 8.1 Z M19 2 L19 6 M17 4 L21 4 M5 17 L5 21 M3 19 L7 19" />
-                    </Canvas>
-                </Viewbox>
+            <Button x:Name="AiButton" Style="{StaticResource Slot}" AutomationProperties.Name="Selection and AI" ToolTipService.ToolTip="Selected text · AI coming soon">
+                <Grid>
+                    <Viewbox Width="20" Height="20">
+                        <Canvas Width="24" Height="24">
+                            <Path Style="{StaticResource Glyph}" Data="M12 3 L13.9 8.1 L19 10 L13.9 11.9 L12 17 L10.1 11.9 L5 10 L10.1 8.1 Z M19 2 L19 6 M17 4 L21 4 M5 17 L5 21 M3 19 L7 19" />
+                        </Canvas>
+                    </Viewbox>
+                    <Ellipse
+                        x:Name="SelectionBadge"
+                        Width="8"
+                        Height="8"
+                        Margin="0,-3,-5,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="Collapsed" />
+                </Grid>
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="AiFlyout"
+                        Opened="AiFlyout_Opened"
+                        Placement="RightEdgeAlignedTop"
+                        ShouldConstrainToRootBounds="False">
+                        <StackPanel Width="340" Spacing="12">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Selected text" />
+                            <Border
+                                Padding="12,10"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <StackPanel Spacing="4">
+                                    <TextBlock
+                                        x:Name="SelectionPreview"
+                                        IsTextSelectionEnabled="True"
+                                        MaxLines="6"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        x:Name="SelectionInfo"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}" />
+                                </StackPanel>
+                            </Border>
+                            <Grid x:Name="SelectionActions" ColumnSpacing="8" RowSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Button HorizontalAlignment="Stretch" Click="SelectionCopy_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                                        <TextBlock Text="Copy" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="1" HorizontalAlignment="Stretch" Click="SelectionNote_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Glyph="&#xE70B;" />
+                                        <TextBlock Text="Save to notes" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Row="1" HorizontalAlignment="Stretch" Click="SelectionSearch_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Glyph="&#xE721;" />
+                                        <TextBlock Text="Search the web" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="SelectionConvertButton" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Click="SelectionConvert_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Glyph="&#xE8AB;" />
+                                        <TextBlock Text="Convert" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="SelectionStatus" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Visibility="Collapsed" />
+
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="AI" />
+                                    <Border Padding="6,1" VerticalAlignment="Center" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4">
+                                        <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Coming soon" />
+                                    </Border>
+                                </StackPanel>
+                                <Grid ColumnSpacing="8" RowSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Button HorizontalAlignment="Stretch" Content="Rewrite" IsEnabled="False" />
+                                    <Button Grid.Column="1" HorizontalAlignment="Stretch" Content="Summarize" IsEnabled="False" />
+                                    <Button Grid.Row="1" HorizontalAlignment="Stretch" Content="Explain" IsEnabled="False" />
+                                    <Button Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Content="Ask AI" IsEnabled="False" />
+                                </Grid>
+                            </StackPanel>
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Select text in any app and it shows up here. Prices and units light up Convert. Password fields are ignored."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
             </Button>
-            <Button x:Name="ClipboardButton" Style="{StaticResource Slot}" ToolTipService.ToolTip="Clipboard history (Win+Alt+V)">
+            <Button x:Name="ClipboardButton" Style="{StaticResource Slot}" AutomationProperties.Name="Clipboard history" ToolTipService.ToolTip="Clipboard history (Win+Alt+V)">
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
                         <Path Style="{StaticResource Glyph}" Data="M9 2 L15 2 A1 1 0 0 1 16 3 L16 5 A1 1 0 0 1 15 6 L9 6 A1 1 0 0 1 8 5 L8 3 A1 1 0 0 1 9 2 Z M16 4 L18 4 A2 2 0 0 1 20 6 L20 20 A2 2 0 0 1 18 22 L6 22 A2 2 0 0 1 4 20 L4 6 A2 2 0 0 1 6 4 L8 4" />
@@ -383,7 +491,7 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
-            <Button x:Name="ConvertButton" Style="{StaticResource Slot}" ToolTipService.ToolTip="Convert currency, units and time zones">
+            <Button x:Name="ConvertButton" Style="{StaticResource Slot}" AutomationProperties.Name="Convert" ToolTipService.ToolTip="Convert currency, units and time zones">
                 <Grid>
                     <Viewbox Width="20" Height="20">
                         <Canvas Width="24" Height="24">
@@ -422,33 +530,88 @@
                 </Button.Flyout>
             </Button>
 
-            <Rectangle Style="{StaticResource Sep}" />
+            <Rectangle x:Name="SepTools" Style="{StaticResource Sep}" />
 
-            <Button Opacity="0.45" Style="{StaticResource Slot}" ToolTipService.ToolTip="Quick notes · coming soon">
+            <Button x:Name="NotesButton" Style="{StaticResource Slot}" AutomationProperties.Name="Quick notes" ToolTipService.ToolTip="Quick notes (Win+Alt+N)">
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
                         <Path Style="{StaticResource Glyph}" Data="M12 3 L5 3 A2 2 0 0 0 3 5 L3 19 A2 2 0 0 0 5 21 L19 21 A2 2 0 0 0 21 19 L21 12 M18.4 2.6 A2.1 2.1 0 0 1 21.4 5.6 L12.4 14.6 L8.5 15.5 L9.4 11.6 Z" />
                     </Canvas>
                 </Viewbox>
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="NotesFlyout"
+                        Closed="NotesFlyout_Closed"
+                        Opened="NotesFlyout_Opened"
+                        Placement="RightEdgeAlignedTop"
+                        ShouldConstrainToRootBounds="False">
+                        <controls:NotesPanel x:Name="NotesPanelView" />
+                    </Flyout>
+                </Button.Flyout>
             </Button>
-            <Button Opacity="0.45" Style="{StaticResource Slot}" ToolTipService.ToolTip="Shelf · coming soon">
+            <Button
+                x:Name="ShelfButton"
+                Style="{StaticResource Slot}"
+                AutomationProperties.Name="Shelf" ToolTipService.ToolTip="Shelf: drop files here">
+                <Grid>
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
                         <Path Style="{StaticResource Glyph}" Data="M22 12 L16 12 L14 15 L10 15 L8 12 L2 12 M5.5 5.1 L2 12 L2 18 A2 2 0 0 0 4 20 L20 20 A2 2 0 0 0 22 18 L22 12 L18.5 5.1 A2 2 0 0 0 16.8 4 L7.2 4 A2 2 0 0 0 5.5 5.1 Z" />
                     </Canvas>
                 </Viewbox>
+                    <Border
+                        x:Name="ShelfBadge"
+                        Height="14"
+                        MinWidth="14"
+                        Margin="0,-6,-8,0"
+                        Padding="3,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        CornerRadius="7"
+                        Visibility="Collapsed">
+                        <TextBlock
+                            x:Name="ShelfBadgeText"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="9"
+                            FontWeight="Bold"
+                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Border>
+                </Grid>
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="ShelfFlyout"
+                        Opened="ShelfFlyout_Opened"
+                        Placement="RightEdgeAlignedTop"
+                        ShouldConstrainToRootBounds="False">
+                        <controls:ShelfPanel x:Name="ShelfPanelView" />
+                    </Flyout>
+                </Button.Flyout>
             </Button>
-            <Button Opacity="0.45" Style="{StaticResource Slot}" ToolTipService.ToolTip="Capture · coming soon">
+            <Button
+                x:Name="CaptureButton"
+                Click="Capture_Click"
+                Style="{StaticResource Slot}"
+                AutomationProperties.Name="Capture" ToolTipService.ToolTip="Capture a screenshot">
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
                         <Path Style="{StaticResource Glyph}" Data="M3 7 L3 5 A2 2 0 0 1 5 3 L7 3 M17 3 L19 3 A2 2 0 0 1 21 5 L21 7 M21 17 L21 19 A2 2 0 0 1 19 21 L17 21 M7 21 L5 21 A2 2 0 0 1 3 19 L3 17 M15.5 12 A3.5 3.5 0 1 1 8.5 12 A3.5 3.5 0 1 1 15.5 12 Z" />
                     </Canvas>
                 </Viewbox>
+                <FlyoutBase.AttachedFlyout>
+                    <Flyout
+                        x:Name="CaptureFlyout"
+                        Placement="RightEdgeAlignedTop"
+                        ShouldConstrainToRootBounds="False">
+                        <controls:CapturePanel x:Name="CapturePanelView" />
+                    </Flyout>
+                </FlyoutBase.AttachedFlyout>
             </Button>
         </StackPanel>
 
         <StackPanel x:Name="BottomSlots" Grid.Row="2" Padding="0,0,0,6" Spacing="2">
-            <Button x:Name="AwakeButton" Style="{StaticResource Slot}" ToolTipService.ToolTip="Keep awake">
+            <Button x:Name="AwakeButton" Style="{StaticResource Slot}" AutomationProperties.Name="Keep awake" ToolTipService.ToolTip="Keep awake">
                 <Grid>
                 <Viewbox Width="20" Height="20">
                     <Canvas Width="24" Height="24">
@@ -513,7 +676,7 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
-            <Button x:Name="RemindersButton" Style="{StaticResource Slot}" ToolTipService.ToolTip="Reminders">
+            <Button x:Name="RemindersButton" Style="{StaticResource Slot}" AutomationProperties.Name="Reminders" ToolTipService.ToolTip="Reminders">
                 <Grid>
                     <Viewbox Width="20" Height="20">
                         <Canvas Width="24" Height="24">
@@ -631,25 +794,27 @@
                 </Button.Flyout>
             </Button>
 
-            <Rectangle Style="{StaticResource Sep}" />
+            <Rectangle x:Name="SepMenu" Style="{StaticResource Sep}" />
 
-            <Button Style="{StaticResource Slot}" ToolTipService.ToolTip="Transom menu">
+            <Button Style="{StaticResource Slot}" AutomationProperties.Name="Transom menu" ToolTipService.ToolTip="Transom menu">
                 <Viewbox Width="24" Height="24" Tag="logo">
                     <Canvas Width="48" Height="48">
                         <Rectangle Canvas.Left="1" Canvas.Top="1" Width="12" Height="46" Fill="#2F6BFF" RadiusX="6" RadiusY="6" />
                         <Ellipse Canvas.Left="4.4" Canvas.Top="6.4" Width="5.2" Height="5.2" Fill="#0B1F5C" />
                         <Ellipse Canvas.Left="4.4" Canvas.Top="36.4" Width="5.2" Height="5.2" Fill="#0B1F5C" />
                         <Ellipse Canvas.Left="3.6" Canvas.Top="20.6" Width="6.8" Height="6.8" Fill="White" />
-                        <Path Data="M17 2 A22 22 0 0 1 17 46 Z" Fill="#34D8A9" Stroke="#13A07A" StrokeThickness="1" />
+                        <Path
+                            Data="F0 M17,2 A22,22 0 0 1 17,46 Z M21,12 A4,4 0 1 0 29,12 A4,4 0 1 0 21,12 Z M23,37 A3,3 0 1 0 29,37 A3,3 0 1 0 23,37 Z"
+                            Fill="#34D8A9"
+                            Stroke="#13A07A"
+                            StrokeThickness="1" />
                         <Ellipse Canvas.Left="25.4" Canvas.Top="19.4" Width="9.2" Height="9.2" Fill="#2F6BFF" />
-                        <Ellipse Canvas.Left="21.4" Canvas.Top="8.4" Width="7.2" Height="7.2" Fill="#2F6BFF" />
-                        <Ellipse Canvas.Left="22.4" Canvas.Top="33.4" Width="7.2" Height="7.2" Fill="#2F6BFF" />
-                        <Ellipse Canvas.Left="40.5" Canvas.Top="10" Width="6" Height="6" Fill="#2F6BFF" />
-                        <Ellipse Canvas.Left="39.6" Canvas.Top="34.1" Width="4.8" Height="4.8" Fill="#2F6BFF" />
+                        <Ellipse Canvas.Left="39" Canvas.Top="9" Width="8" Height="8" Fill="#2F6BFF" />
+                        <Ellipse Canvas.Left="39" Canvas.Top="33.5" Width="6" Height="6" Fill="#2F6BFF" />
                     </Canvas>
                 </Viewbox>
                 <Button.Flyout>
-                    <MenuFlyout Placement="Right" ShouldConstrainToRootBounds="False">
+                    <MenuFlyout x:Name="TransomMenu" Placement="Right" ShouldConstrainToRootBounds="False">
                         <MenuFlyoutItem Click="Settings_Click" Text="Settings"><MenuFlyoutItem.Icon><FontIcon Glyph="&#xE713;" /></MenuFlyoutItem.Icon></MenuFlyoutItem>
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem Click="Quit_Click" Text="Quit Transom"><MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7E8;" /></MenuFlyoutItem.Icon></MenuFlyoutItem>

@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Transom.Controls;
@@ -21,8 +22,17 @@ public sealed partial class RailWindow : Window
     private readonly ClipboardService _clipboard = new();
     private readonly ConvertService _convert = new();
     private DetectedValue? _detected;
+    private SelectionWatcher? _selection;
+    private string? _selectedText;
     private nint _lastAppWindow;
     private const int ClipboardHotKey = 1;
+    private const int NotesHotKey = 2;
+    private const int NavHotKeyBase = 11;
+    private string _appliedDock = "";
+    private bool _navKeysOn;
+    private readonly NoteStore _notes;
+    private readonly ShelfService _shelf = new();
+    private DateTimeOffset? _captureRequested;
     private bool _isLight;
     private SettingsWindow? _settingsWindow;
     private readonly nint _hwnd;
@@ -72,21 +82,40 @@ public sealed partial class RailWindow : Window
         _dock.SettingChanged += ApplyLook;
         _dock.ClipboardChanged += async () =>
         {
+            if (SelectionWatcher.IsBorrowingClipboard) return;
             var foreground = Win32.GetForegroundWindow();
             await _clipboard.CaptureAsync(foreground == _hwnd ? "" : AppName(foreground));
             DetectFromClipboard();
+            await ShowCaptureIfRequestedAsync();
         };
         _dock.HotKeyPressed += id =>
         {
             if (id == ClipboardHotKey) OpenClipboard();
+            if (id == NotesHotKey) OpenNotes();
+            if (id is >= NavHotKeyBase and < NavHotKeyBase + 9) TriggerRailItem(id - NavHotKeyBase);
         };
         _clipboard.Changed += UpdateClipboard;
         Win32.AddClipboardFormatListener(hwnd);
         Win32.RegisterHotKey(hwnd, ClipboardHotKey, Win32.MOD_WIN | Win32.MOD_ALT | Win32.MOD_NOREPEAT, Win32.VK_V);
-        _dock.Layout();
+        Win32.RegisterHotKey(hwnd, NotesHotKey, Win32.MOD_WIN | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x4E);
+        _notes = new NoteStore(DispatcherQueue);
+        NotesPanelView.Attach(_notes);
+        ShelfPanelView.Attach(_shelf, hwnd);
+        CapturePanelView.Attach(_shelf);
+        CapturePanelView.NewCaptureRequested += () =>
+        {
+            CaptureFlyout.Hide();
+            _ = StartCaptureAsync();
+        };
+        _shelf.Changed += UpdateShelfBadge;
+        UpdateShelfBadge();
+        _selection = new SelectionWatcher(DispatcherQueue);
+        _selection.Changed += OnSelectionChanged;
+        ApplyRailSettings();
 
         if (SystemBackdrop is RailBackdrop backdrop) backdrop.Connected += ApplyLook;
         RailSettings.Current.Changed += ApplyLook;
+        RailSettings.Current.Changed += ApplyRailSettings;
         PowerManager.EnergySaverStatusChanged += OnEnergySaverChanged;
         _ = _media.StartAsync();
 
@@ -94,15 +123,137 @@ public sealed partial class RailWindow : Window
         {
             PowerManager.EnergySaverStatusChanged -= OnEnergySaverChanged;
             RailSettings.Current.Changed -= ApplyLook;
+            RailSettings.Current.Changed -= ApplyRailSettings;
+            for (var i = 0; i < 9; i++) Win32.UnregisterHotKey(_hwnd, NavHotKeyBase + i);
+            if (RailSettings.Current.ClearClipboardOnQuit) _clipboard.ClearUnpinned();
             _settingsWindow?.Close();
             _awake.Stop();
             Notifications.ReminderAction -= OnReminderAction;
             Win32.RemoveClipboardFormatListener(_hwnd);
             Win32.UnregisterHotKey(_hwnd, ClipboardHotKey);
+            Win32.UnregisterHotKey(_hwnd, NotesHotKey);
+            _notes.SaveNow();
             Notifications.Unregister();
+            _selection?.Dispose();
             _shell.Dispose();
             _dock.Dispose();
         };
+    }
+
+    private void ApplyRailSettings()
+    {
+        var settings = RailSettings.Current;
+        ApplyTools(settings);
+        ApplyNavigationKeys(settings.KeyboardNavigation);
+        Win32.SetWindowDisplayAffinity(_hwnd, settings.HideFromCapture ? Win32.WDA_EXCLUDEFROMCAPTURE : 0);
+        if (_selection is not null) _selection.Enabled = settings.WatchSelection;
+        if (!_awake.IsOn) AwakeDuration.SelectedIndex = Math.Clamp(settings.AwakeDefault, 0, 3);
+
+        if (settings.Dock == _appliedDock) return;
+        _appliedDock = settings.Dock;
+        ApplyDock(settings.Dock);
+        _dock.Layout();
+    }
+
+    // Moving between edges turns the rail horizontal for top/bottom and points every panel
+    // toward the middle of the screen, away from the edge the rail sits on.
+    private void ApplyDock(string dock)
+    {
+        _dock.Edge = dock switch { "right" => Win32.ABE_RIGHT, "top" => Win32.ABE_TOP, "bottom" => Win32.ABE_BOTTOM, _ => Win32.ABE_LEFT };
+        var horizontal = _dock.IsHorizontal;
+
+        Root.RowDefinitions.Clear();
+        Root.ColumnDefinitions.Clear();
+        foreach (var size in new[] { GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto })
+        {
+            if (horizontal) Root.ColumnDefinitions.Add(new ColumnDefinition { Width = size });
+            else Root.RowDefinitions.Add(new RowDefinition { Height = size });
+        }
+        Grid.SetRow(TopSlots, 0);
+        Grid.SetColumn(TopSlots, 0);
+        Grid.SetRow(BottomSlots, horizontal ? 0 : 2);
+        Grid.SetColumn(BottomSlots, horizontal ? 2 : 0);
+
+        var orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical;
+        TopSlots.Orientation = BottomSlots.Orientation = orientation;
+        TopSlots.Padding = horizontal ? new Thickness(6, 0, 0, 0) : new Thickness(0, 6, 0, 0);
+        BottomSlots.Padding = horizontal ? new Thickness(0, 0, 6, 0) : new Thickness(0, 0, 0, 6);
+        TopSlots.VerticalAlignment = BottomSlots.VerticalAlignment = horizontal ? VerticalAlignment.Center : VerticalAlignment.Stretch;
+
+        Root.BorderThickness = _dock.Edge switch
+        {
+            Win32.ABE_RIGHT => new Thickness(1, 0, 0, 0),
+            Win32.ABE_TOP => new Thickness(0, 0, 0, 1),
+            Win32.ABE_BOTTOM => new Thickness(0, 1, 0, 0),
+            _ => new Thickness(0, 0, 1, 0),
+        };
+
+        var (start, end) = _dock.Edge switch
+        {
+            Win32.ABE_RIGHT => (FlyoutPlacementMode.LeftEdgeAlignedTop, FlyoutPlacementMode.LeftEdgeAlignedBottom),
+            Win32.ABE_TOP => (FlyoutPlacementMode.BottomEdgeAlignedLeft, FlyoutPlacementMode.BottomEdgeAlignedRight),
+            Win32.ABE_BOTTOM => (FlyoutPlacementMode.TopEdgeAlignedLeft, FlyoutPlacementMode.TopEdgeAlignedRight),
+            _ => (FlyoutPlacementMode.RightEdgeAlignedTop, FlyoutPlacementMode.RightEdgeAlignedBottom),
+        };
+        foreach (var flyout in new FlyoutBase[] { MediaFlyout, AiFlyout, ClipboardFlyout, ConvertFlyout, NotesFlyout, ShelfFlyout, CaptureFlyout }) flyout.Placement = start;
+        foreach (var flyout in new FlyoutBase[] { AwakeFlyout, RemindersFlyout, TransomMenu }) flyout.Placement = end;
+
+        var tipPlacement = _dock.Edge switch
+        {
+            Win32.ABE_RIGHT => PlacementMode.Left,
+            Win32.ABE_TOP => PlacementMode.Bottom,
+            Win32.ABE_BOTTOM => PlacementMode.Top,
+            _ => PlacementMode.Right,
+        };
+        foreach (var button in TopSlots.Children.Concat(BottomSlots.Children).OfType<Button>()) ToolTipService.SetPlacement(button, tipPlacement);
+    }
+
+    private void ApplyTools(RailSettings settings)
+    {
+        bool Show(string id) => !settings.HiddenTools.Contains(id);
+        static Visibility V(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+
+        ArtButton.Visibility = PlayButton.Visibility = V(Show("media"));
+        AiButton.Visibility = V(Show("ai"));
+        ClipboardButton.Visibility = V(Show("clipboard"));
+        ConvertButton.Visibility = V(Show("convert"));
+        NotesButton.Visibility = V(Show("notes"));
+        ShelfButton.Visibility = V(Show("shelf"));
+        CaptureButton.Visibility = V(Show("capture"));
+        AwakeButton.Visibility = V(Show("awake"));
+        RemindersButton.Visibility = V(Show("reminders"));
+
+        var firstGroup = Show("ai") || Show("clipboard") || Show("convert");
+        var secondGroup = Show("notes") || Show("shelf") || Show("capture");
+        SepMedia.Visibility = V(Show("media") && (firstGroup || secondGroup));
+        SepTools.Visibility = V(firstGroup && secondGroup);
+        SepMenu.Visibility = V(Show("awake") || Show("reminders"));
+    }
+
+    private void ApplyNavigationKeys(bool on)
+    {
+        if (on == _navKeysOn) return;
+        _navKeysOn = on;
+        for (var i = 0; i < 9; i++)
+        {
+            if (on) Win32.RegisterHotKey(_hwnd, NavHotKeyBase + i, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, (uint)('1' + i));
+            else Win32.UnregisterHotKey(_hwnd, NavHotKeyBase + i);
+        }
+    }
+
+    private void TriggerRailItem(int index)
+    {
+        var items = TopSlots.Children.Concat(BottomSlots.Children)
+            .OfType<Button>()
+            .Where(b => b.Visibility == Visibility.Visible && b.Opacity > 0.9)
+            .ToList();
+        if (index >= items.Count) return;
+
+        var button = items[index];
+        Activate();
+        if (button == CaptureButton) _ = StartCaptureAsync();
+        else if (button == PlayButton) _ = _media.TogglePlayPauseAsync();
+        else button.Flyout?.ShowAt(button);
     }
 
     // Windows announces full screen before the window has finished resizing, so measure
@@ -145,7 +296,7 @@ public sealed partial class RailWindow : Window
         Root.RequestedTheme = isLight ? ElementTheme.Light : ElementTheme.Dark;
         UpdateAwake();
         var solid = (SystemBackdrop as RailBackdrop)?.Apply(settings, taskbar, isLight, saver);
-        Root.Background = solid is { } color ? new SolidColorBrush(color) : null;
+        Root.Background = new SolidColorBrush(solid ?? Microsoft.UI.Colors.Transparent);
     }
 
     private void OnEnergySaverChanged(object? sender, object e) => DispatcherQueue.TryEnqueue(ApplyLook);
@@ -247,10 +398,20 @@ public sealed partial class RailWindow : Window
     private void DetectFromClipboard()
     {
         var latest = _clipboard.Items.OrderByDescending(i => i.Copied).FirstOrDefault();
-        _detected = latest is { Kind: ClipKind.Text } && DateTimeOffset.Now - latest.Copied < TimeSpan.FromSeconds(5)
-            ? _convert.Detect(latest.Text)
-            : null;
+        if (latest is { Kind: ClipKind.Text } && DateTimeOffset.Now - latest.Copied < TimeSpan.FromSeconds(5)) ShowDetected(latest.Text);
+    }
 
+    private void OnSelectionChanged(string? text)
+    {
+        _selectedText = text;
+        SelectionBadge.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(AiButton, text is null ? "Selected text · AI coming soon" : $"Selected: {Shorten(text, 60)}");
+        ShowDetected(text);
+    }
+
+    private void ShowDetected(string? text)
+    {
+        _detected = text is null ? null : _convert.Detect(text);
         ConvertBadge.Visibility = _detected is null ? Visibility.Collapsed : Visibility.Visible;
         if (_detected is null)
         {
@@ -259,10 +420,124 @@ public sealed partial class RailWindow : Window
         }
         var symbol = _detected.Currency is { } code && _convert.Currencies.TryGetValue(code, out var c) ? c.Symbol : _detected.Unit ?? "";
         ConvertBadgeText.Text = symbol.Length > 3 ? symbol[..3] : symbol;
-        ToolTipService.SetToolTip(ConvertButton, $"Convert {latest!.Text.Trim()}");
+        ToolTipService.SetToolTip(ConvertButton, $"Convert {text!.Trim()}");
+    }
+
+    private static string Shorten(string text, int max)
+    {
+        var line = text.ReplaceLineEndings(" ");
+        return line.Length > max ? line[..max] + "…" : line;
+    }
+
+    private void AiFlyout_Opened(object sender, object e)
+    {
+        var text = _selectedText;
+        SelectionStatus.Visibility = Visibility.Collapsed;
+        SelectionActions.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        SelectionPreview.Text = text is null ? "Nothing selected right now." : Shorten(text, 600);
+        SelectionPreview.Foreground = (Brush)Application.Current.Resources[text is null ? "TextFillColorSecondaryBrush" : "TextFillColorPrimaryBrush"];
+        SelectionInfo.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        SelectionInfo.Text = text is null ? "" : $"{text.Length:N0} characters";
+        SelectionConvertButton.IsEnabled = _detected is not null;
+    }
+
+    private void ShowSelectionStatus(string message)
+    {
+        SelectionStatus.Text = message;
+        SelectionStatus.Visibility = Visibility.Visible;
+    }
+
+    private void SelectionCopy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedText is not { } text) return;
+        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        package.SetText(text);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        ShowSelectionStatus("Copied.");
+    }
+
+    private void SelectionNote_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedText is not { } text) return;
+        _notes.Update(_notes.Create(), text);
+        _notes.SaveNow();
+        ShowSelectionStatus("Saved as a new quick note.");
+    }
+
+    private async void SelectionSearch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedText is not { } text) return;
+        AiFlyout.Hide();
+        await Windows.System.Launcher.LaunchUriAsync(new Uri("https://www.google.com/search?q=" + Uri.EscapeDataString(Shorten(text, 300))));
+    }
+
+    private void SelectionConvert_Click(object sender, RoutedEventArgs e)
+    {
+        AiFlyout.Hide();
+        ConvertFlyout.ShowAt(ConvertButton);
     }
 
     private void ConvertFlyout_Opened(object sender, object e) => ConvertPanelView.Opened(_detected);
+
+    private void OpenNotes()
+    {
+        Activate();
+        NotesFlyout.ShowAt(NotesButton);
+    }
+
+    private void NotesFlyout_Opened(object sender, object e) => NotesPanelView.Opened();
+
+    private void ShelfFlyout_Opened(object sender, object e) => ShelfPanelView.Opened();
+
+    private void UpdateShelfBadge()
+    {
+        var count = _shelf.Items.Count;
+        ShelfBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShelfBadgeText.Text = count > 99 ? "99+" : count.ToString();
+        ToolTipService.SetToolTip(ShelfButton, count == 0 ? "Shelf: drop files here" : $"Shelf · {count} item{(count == 1 ? "" : "s")}");
+    }
+
+    private void Root_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)) return;
+        e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Link;
+        e.DragUIOverride.Caption = "Add to shelf";
+        ShelfButton.Background = (Brush)Application.Current.Resources["AccentFillColorSecondaryBrush"];
+    }
+
+    private void Root_DragLeave(object sender, DragEventArgs e) => ShelfButton.ClearValue(Control.BackgroundProperty);
+
+    private async void Root_Drop(object sender, DragEventArgs e)
+    {
+        ShelfButton.ClearValue(Control.BackgroundProperty);
+        var deferral = e.GetDeferral();
+        _shelf.Add(await Controls.ShelfPanel.ReadDroppedPathsAsync(e.DataView));
+        deferral.Complete();
+    }
+
+    private void Capture_Click(object sender, RoutedEventArgs e) => _ = StartCaptureAsync();
+
+    // Uses Windows' own snipping overlay (region, window or full screen); the result lands on the
+    // clipboard, where the clipboard watcher picks it up and opens the Capture panel.
+    private async Task StartCaptureAsync()
+    {
+        _captureRequested = DateTimeOffset.Now;
+        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-screenclip:"));
+    }
+
+    private async Task ShowCaptureIfRequestedAsync()
+    {
+        if (_captureRequested is not { } requested || DateTimeOffset.Now - requested > TimeSpan.FromMinutes(2)) return;
+        var latest = _clipboard.Items.OrderByDescending(i => i.Copied).FirstOrDefault();
+        if (latest is not { Kind: ClipKind.Image } || latest.Copied < requested || _clipboard.ImagePath(latest) is not { } path) return;
+
+        _captureRequested = null;
+        await CapturePanelView.ShowAsync(path);
+        Activate();
+        CaptureFlyout.ShowAt(CaptureButton);
+    }
+
+    private void NotesFlyout_Closed(object sender, object e) => NotesPanelView.Closed();
 
     private void ConvertFlyout_Closed(object sender, object e)
     {
@@ -454,7 +729,7 @@ public sealed partial class RailWindow : Window
 
     private void OnReminderAction(string action, string id)
     {
-        if (action == "snooze") _reminders.Snooze(id, TimeSpan.FromMinutes(5));
+        if (action == "snooze") _reminders.Snooze(id, TimeSpan.FromMinutes(RailSettings.Current.SnoozeMinutes));
         else if (action == "done") _reminders.Remove(id);
     }
 
@@ -526,8 +801,15 @@ public sealed partial class RailWindow : Window
                             icon.Width = icon.Height = Math.Round(slot * (icon.Tag is "logo" ? 0.6 : 0.5));
                         }
                         break;
+                    case Rectangle sep when _dock.IsHorizontal:
+                        sep.Width = 1;
+                        sep.Height = Math.Round(slot * 0.6);
+                        sep.Margin = new Thickness(4, 0, 4, 0);
+                        break;
                     case Rectangle sep:
                         sep.Width = Math.Round(slot * 0.6);
+                        sep.Height = 1;
+                        sep.Margin = new Thickness(0, 4, 0, 4);
                         break;
                 }
             }

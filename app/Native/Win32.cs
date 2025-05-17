@@ -15,7 +15,8 @@ internal static partial class Win32
     public const int GWL_STYLE = -16;
     public const int WS_THICKFRAME = 0x00040000, WS_DLGFRAME = 0x00400000, WS_BORDER = 0x00800000;
     public const uint WM_CLIPBOARDUPDATE = 0x031D, WM_HOTKEY = 0x0312;
-    public const uint MOD_ALT = 0x0001, MOD_WIN = 0x0008, MOD_NOREPEAT = 0x4000;
+    public const uint MOD_ALT = 0x0001, MOD_CONTROL = 0x0002, MOD_WIN = 0x0008, MOD_NOREPEAT = 0x4000;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
     public const ushort VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_V = 0x56;
     public const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 0x0002;
     public const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
@@ -147,6 +148,10 @@ internal static partial class Win32
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint hWnd);
 
     [LibraryImport("user32.dll")]
@@ -195,6 +200,92 @@ internal static partial class Win32
 
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmSetWindowAttribute(nint hwnd, uint dwAttribute, ref int pvAttribute, int cbAttribute);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowsHookExW")]
+    public static unsafe partial nint SetWindowsHookEx(int idHook, delegate* unmanaged<int, nint, nint, nint> lpfn, nint hmod, uint dwThreadId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnhookWindowsHookEx(nint hhk);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint CallNextHookEx(nint hhk, int nCode, nint wParam, nint lParam);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMessageW")]
+    public static unsafe partial int GetMessage(void* lpMsg, nint hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [LibraryImport("user32.dll", EntryPoint = "PostThreadMessageW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool PostThreadMessage(uint idThread, uint msg, nint wParam, nint lParam);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial uint GetCurrentThreadId();
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial nint GetModuleHandle(string? lpModuleName);
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoInitializeEx(nint pvReserved, uint dwCoInit);
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoCreateInstance(in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
+
+    [LibraryImport("oleaut32.dll")]
+    public static partial void SysFreeString(nint bstrString);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool OpenClipboard(nint hWndNewOwner);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CloseClipboard();
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EmptyClipboard();
+
+    [LibraryImport("user32.dll")]
+    public static partial uint EnumClipboardFormats(uint format);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetClipboardData(uint uFormat);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetClipboardData(uint uFormat, nint hMem);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetClipboardSequenceNumber();
+
+    [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial uint RegisterClipboardFormat(string lpszFormat);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDoubleClickTime();
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nint GlobalAlloc(uint uFlags, nuint dwBytes);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nint GlobalLock(nint hMem);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GlobalUnlock(nint hMem);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nuint GlobalSize(nint hMem);
+
+    public static unsafe void SendCtrlC()
+    {
+        var keys = new[] { (VK_CONTROL, 0u), ((ushort)0x43, 0u), ((ushort)0x43, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP) };
+        var inputs = stackalloc INPUT[keys.Length];
+        for (var i = 0; i < keys.Length; i++)
+        {
+            inputs[i] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = keys[i].Item1, dwFlags = keys[i].Item2 } } };
+        }
+        SendInput((uint)keys.Length, inputs, sizeof(INPUT));
+    }
 
     public static nint SetWindowProc(nint hWnd, nint proc) =>
         IntPtr.Size == 8 ? SetWindowLongPtr64(hWnd, GWLP_WNDPROC, proc) : SetWindowLong(hWnd, GWLP_WNDPROC, (int)proc);
