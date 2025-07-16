@@ -9,7 +9,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.Resources>
             <Style x:Key="Card" TargetType="Border">
                 <Setter Property="Padding" Value="16,12" />
@@ -29,61 +29,51 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
         </Grid.Resources>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="Transom Settings">
+        <Grid x:Name="NavColumn" Grid.RowSpan="2">
+            <Grid.Resources>
+                <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                <StaticResource x:Key="ButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+            </Grid.Resources>
+            <Canvas x:Name="NavCanvas" />
+            <ScrollViewer x:Name="NavScroll" Padding="0,44,0,12" Visibility="Collapsed">
+                <StackPanel x:Name="NavStack" Spacing="2" />
+            </ScrollViewer>
+        </Grid>
+
+        <TitleBar x:Name="AppTitleBar" Grid.Column="1" Title="Transom Settings">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
 
-        <NavigationView
-            x:Name="Nav"
+        <Border
             Grid.Row="1"
-            IsBackButtonVisible="Collapsed"
-            IsPaneToggleButtonVisible="False"
-            IsSettingsVisible="False"
-            OpenPaneLength="220"
-            PaneDisplayMode="Left"
-            SelectionChanged="Nav_SelectionChanged">
-            <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE713;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Appearance" Tag="appearance">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE771;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Dock" Tag="dock">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE7F4;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Tools" Tag="tools">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE71D;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Privacy" Tag="privacy">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE72E;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="About" Tag="about">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE946;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
-
+            Grid.Column="1"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1,1,0,0"
+            CornerRadius="8,0,0,0">
             <ScrollViewer>
-                <Grid MaxWidth="820" Padding="32,8,32,32" HorizontalAlignment="Stretch">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="40*" MaxWidth="884" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid x:Name="Pages" Grid.Column="1" Padding="32,8,32,32">
 
                     <StackPanel x:Name="GeneralPage" Spacing="6">
                         <TextBlock Style="{StaticResource PageTitle}" Text="General" />
@@ -97,7 +87,7 @@
                                     <TextBlock Text="Start Transom with Windows" />
                                     <TextBlock x:Name="StartupHint" Style="{StaticResource Hint}" Text="Open Transom automatically when you sign in." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="StartupToggle" Grid.Column="1" MinWidth="0" Toggled="StartupToggle_Toggled" />
+                                <ToggleSwitch x:Name="StartupToggle" AutomationProperties.Name="Start Transom with Windows" Grid.Column="1" MinWidth="0" Toggled="StartupToggle_Toggled" />
                             </Grid>
                         </Border>
 
@@ -112,7 +102,7 @@
                                     <TextBlock Text="Keyboard navigation" />
                                     <TextBlock Style="{StaticResource Hint}" Text="Ctrl+Alt+1 to 9 opens the rail's items in order, from the first to the ninth." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="NavToggle" Grid.Column="1" MinWidth="0" Toggled="NavToggle_Toggled" />
+                                <ToggleSwitch x:Name="NavToggle" AutomationProperties.Name="Keyboard navigation" Grid.Column="1" MinWidth="0" Toggled="NavToggle_Toggled" />
                             </Grid>
                         </Border>
                         <Border Style="{StaticResource Card}">
@@ -212,6 +202,60 @@
                             </StackPanel>
                         </Border>
 
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Icons" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="10">
+                                <StackPanel>
+                                    <TextBlock Text="Icon color" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Automatic follows light and dark. Changes show on the rail right away." />
+                                </StackPanel>
+                                <StackPanel x:Name="IconColorSwatches" Orientation="Horizontal" Spacing="8" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Icon size" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="How large the icons are inside their slots." />
+                                </StackPanel>
+                                <ComboBox x:Name="IconSizeBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" AutomationProperties.Name="Icon size" SelectionChanged="IconSizeBox_SelectionChanged">
+                                    <x:String>Small</x:String>
+                                    <x:String>Medium</x:String>
+                                    <x:String>Large</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Badges use the icon color" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Otherwise badges, like Convert's currency sign, use your accent color." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="BadgeColorToggle" Grid.Column="1" MinWidth="0" AutomationProperties.Name="Badges use the icon color" Toggled="BadgeColorToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Separators" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="The thin lines between groups of tools." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="SeparatorsToggle" Grid.Column="1" MinWidth="0" AutomationProperties.Name="Separators" Toggled="SeparatorsToggle_Toggled" />
+                            </Grid>
+                        </Border>
+
                         <TextBlock Style="{StaticResource GroupTitle}" Text="More" />
                         <Border Style="{StaticResource Card}">
                             <Grid ColumnSpacing="12">
@@ -224,7 +268,7 @@
                                     <TextBlock Style="{StaticResource Hint}" Text="Light or dark rail and icons. Follow taskbar uses your Windows mode." />
                                 </StackPanel>
                                 <ComboBox
-                                    x:Name="ThemeBox"
+                                    x:Name="ThemeBox" AutomationProperties.Name="Rail theme"
                                     Grid.Column="1"
                                     MinWidth="160"
                                     VerticalAlignment="Center"
@@ -245,7 +289,7 @@
                                     <TextBlock Text="Go solid on battery saver" />
                                     <TextBlock Style="{StaticResource Hint}" Text="Turns off transparency to save power, like Windows does." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="BatteryToggle" Grid.Column="1" MinWidth="0" Toggled="BatteryToggle_Toggled" />
+                                <ToggleSwitch x:Name="BatteryToggle" AutomationProperties.Name="Go solid on battery saver" Grid.Column="1" MinWidth="0" Toggled="BatteryToggle_Toggled" />
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -288,6 +332,21 @@
                                 </StackPanel>
                             </GridViewItem>
                         </GridView>
+
+                        <TextBlock Style="{StaticResource GroupTitle}" Text="Top and bottom docks" />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Show live details" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Slots grow to show their value right on the rail: a conversion like $100 → ₹9,511, the song that's playing, Keep awake's time left and your next reminder." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="LiveDetailsToggle" Grid.Column="1" MinWidth="0" AutomationProperties.Name="Show live details" Toggled="LiveDetailsToggle_Toggled" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel x:Name="ToolsPage" Spacing="6" Visibility="Collapsed">
@@ -297,8 +356,57 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel x:Name="ToolToggles" Spacing="2" />
                         </Border>
+                    </StackPanel>
 
-                        <TextBlock Style="{StaticResource GroupTitle}" Text="Clipboard" />
+                    <StackPanel x:Name="MediaPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Media" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Shows what's playing in any app, with artwork, play and pause, skip and a timeline. During a call, call controls appear just above it." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="VolumePage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Volume" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Change the volume of everything, or of each app that's playing. Scroll over the Volume icon to change it without opening anything." />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Scroll step" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="How much one notch of the mouse wheel changes the volume." />
+                                </StackPanel>
+                                <ComboBox x:Name="VolumeStepBox" AutomationProperties.Name="Scroll step" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="VolumeStepBox_SelectionChanged">
+                                    <x:String>1%</x:String>
+                                    <x:String>2%</x:String>
+                                    <x:String>5%</x:String>
+                                    <x:String>10%</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AiPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Selected text and AI" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Select text in any app to copy it, save it as a note or search the web. AI actions like rewrite and summarize are coming soon." />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Notice selected text" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Reads the text you select in other apps so prices and units light up Convert and these actions are ready. Nothing is saved or sent anywhere, and password fields are skipped. Some apps, like VS Code, hide their text, so there Transom copies the selection for a moment and puts your clipboard back." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="SelectionToggle" AutomationProperties.Name="Notice selected text" Grid.Column="1" MinWidth="0" Toggled="SelectionToggle_Toggled" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="ClipboardPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Clipboard history" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Everything you copy, ready to paste again. Win+Alt+V opens it from anywhere. Passwords from password managers are never saved." />
                         <Border Style="{StaticResource Card}">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
@@ -309,7 +417,7 @@
                                     <TextBlock Text="History size" />
                                     <TextBlock Style="{StaticResource Hint}" Text="How many recent items to keep. Pinned items are always kept." />
                                 </StackPanel>
-                                <ComboBox x:Name="ClipLimitBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="ClipLimitBox_SelectionChanged">
+                                <ComboBox x:Name="ClipLimitBox" AutomationProperties.Name="History size" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="ClipLimitBox_SelectionChanged">
                                     <x:String>25 items</x:String>
                                     <x:String>50 items</x:String>
                                     <x:String>100 items</x:String>
@@ -327,49 +435,36 @@
                                     <TextBlock Text="Clear history when Transom quits" />
                                     <TextBlock Style="{StaticResource Hint}" Text="Pinned items stay." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="ClearOnQuitToggle" Grid.Column="1" MinWidth="0" Toggled="ClearOnQuitToggle_Toggled" />
+                                <ToggleSwitch x:Name="ClearOnQuitToggle" AutomationProperties.Name="Clear history when Transom quits" Grid.Column="1" MinWidth="0" Toggled="ClearOnQuitToggle_Toggled" />
                             </Grid>
                         </Border>
+                    </StackPanel>
 
-                        <TextBlock Style="{StaticResource GroupTitle}" Text="Reminders and Keep awake" />
+                    <StackPanel x:Name="ConvertPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Convert" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Currencies, units and time zones. Select or copy something like $100, 5 km or 3 PM EST and Convert lights up, ready to convert. Choose your currencies and cities in the panel itself." />
                         <Border Style="{StaticResource Card}">
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Snooze length" />
-                                    <TextBlock Style="{StaticResource Hint}" Text="Used by the Snooze button on reminder notifications." />
-                                </StackPanel>
-                                <ComboBox x:Name="SnoozeBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="SnoozeBox_SelectionChanged">
-                                    <x:String>5 min</x:String>
-                                    <x:String>10 min</x:String>
-                                    <x:String>15 min</x:String>
-                                    <x:String>30 min</x:String>
-                                </ComboBox>
-                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}">
+                                <Run Text="Currency rates by" />
+                                <Hyperlink NavigateUri="https://www.exchangerate-api.com">ExchangeRate-API</Hyperlink>
+                                <Run Text=", fetched at most every 12 hours and only when you open Convert." />
+                            </TextBlock>
                         </Border>
-                        <Border Style="{StaticResource Card}">
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Keep awake default" />
-                                    <TextBlock Style="{StaticResource Hint}" Text="The duration picked when you open Keep awake." />
-                                </StackPanel>
-                                <ComboBox x:Name="AwakeBox" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="AwakeBox_SelectionChanged">
-                                    <x:String>30 min</x:String>
-                                    <x:String>1 hour</x:String>
-                                    <x:String>2 hours</x:String>
-                                    <x:String>Until I stop it</x:String>
-                                </ComboBox>
-                            </Grid>
-                        </Border>
+                    </StackPanel>
 
-                        <TextBlock Style="{StaticResource GroupTitle}" Text="Capture" />
+                    <StackPanel x:Name="NotesPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Quick notes" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Notes that save as you type and stay on this PC. Win+Alt+N opens them from anywhere." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="ShelfPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Shelf" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Drop files anywhere on the rail to keep them handy, then drag them out wherever you need them. The shelf keeps links, so your files stay where they are." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="CapturePage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Capture" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Take a screenshot, then copy its text, draw on it, pick a color, save it or add it to the shelf." />
                         <Border Style="{StaticResource Card}">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
@@ -381,6 +476,52 @@
                                     <TextBlock Style="{StaticResource Hint}" Text="Pictures › Transom" />
                                 </StackPanel>
                                 <Button Grid.Column="1" VerticalAlignment="Center" Click="OpenScreenshots_Click" Content="Open folder" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AwakePage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Keep awake" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Stops your PC from going to sleep for a while, for downloads, presentations or long tasks." />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Default duration" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="The duration picked when you open Keep awake." />
+                                </StackPanel>
+                                <ComboBox x:Name="AwakeBox" AutomationProperties.Name="Keep awake default duration" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="AwakeBox_SelectionChanged">
+                                    <x:String>30 min</x:String>
+                                    <x:String>1 hour</x:String>
+                                    <x:String>2 hours</x:String>
+                                    <x:String>Until I stop it</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="RemindersPage" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Reminders" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Hint}" Text="Quick reminders that arrive as Windows notifications, with Snooze and Done buttons." />
+                        <Border Style="{StaticResource Card}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Snooze length" />
+                                    <TextBlock Style="{StaticResource Hint}" Text="Used by the Snooze button on reminder notifications." />
+                                </StackPanel>
+                                <ComboBox x:Name="SnoozeBox" AutomationProperties.Name="Snooze length" Grid.Column="1" MinWidth="120" VerticalAlignment="Center" SelectionChanged="SnoozeBox_SelectionChanged">
+                                    <x:String>5 min</x:String>
+                                    <x:String>10 min</x:String>
+                                    <x:String>15 min</x:String>
+                                    <x:String>30 min</x:String>
+                                </ComboBox>
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -397,20 +538,7 @@
                                     <TextBlock Text="Hide the rail from screenshots and recordings" />
                                     <TextBlock Style="{StaticResource Hint}" Text="The rail won't appear in screenshots, screen recordings or screen sharing. Useful when it shows your music or reminders." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="HideCaptureToggle" Grid.Column="1" MinWidth="0" Toggled="HideCaptureToggle_Toggled" />
-                            </Grid>
-                        </Border>
-                        <Border Style="{StaticResource Card}">
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Notice selected text" />
-                                    <TextBlock Style="{StaticResource Hint}" Text="Reads the text you select in other apps so prices and units light up Convert and selection actions are ready. Nothing is saved or sent anywhere. Password fields are skipped. VS Code hides its text from this, so there Transom copies the selection for a moment and puts your clipboard back." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="SelectionToggle" Grid.Column="1" MinWidth="0" Toggled="SelectionToggle_Toggled" />
+                                <ToggleSwitch x:Name="HideCaptureToggle" AutomationProperties.Name="Hide the rail from screenshots and recordings" Grid.Column="1" MinWidth="0" Toggled="HideCaptureToggle_Toggled" />
                             </Grid>
                         </Border>
                         <Border Style="{StaticResource Card}">
@@ -475,8 +603,9 @@
                             </Grid>
                         </Border>
                     </StackPanel>
+                    </Grid>
                 </Grid>
             </ScrollViewer>
-        </NavigationView>
+        </Border>
     </Grid>
 </Window>

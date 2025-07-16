@@ -41,6 +41,12 @@ public sealed class RailSettings
     public bool HideFromCapture { get; set; }
     public bool KeyboardNavigation { get; set; }
     public bool WatchSelection { get; set; } = true;
+    public int VolumeStep { get; set; } = 2;
+    public string IconColor { get; set; } = "auto";
+    public int IconSize { get; set; } = 1;
+    public bool BadgesMatchIcons { get; set; }
+    public bool ShowSeparators { get; set; } = true;
+    public bool LiveDetails { get; set; } = true;
 
     public void Save()
     {
@@ -65,6 +71,12 @@ public sealed class RailSettings
             values[nameof(HideFromCapture)] = HideFromCapture;
             values[nameof(KeyboardNavigation)] = KeyboardNavigation;
             values[nameof(WatchSelection)] = WatchSelection;
+            values[nameof(VolumeStep)] = VolumeStep;
+            values[nameof(IconColor)] = IconColor;
+            values[nameof(IconSize)] = IconSize;
+            values[nameof(BadgesMatchIcons)] = BadgesMatchIcons;
+            values[nameof(ShowSeparators)] = ShowSeparators;
+            values[nameof(LiveDetails)] = LiveDetails;
         }
         catch (Exception ex)
         {
@@ -97,6 +109,12 @@ public sealed class RailSettings
             if (values[nameof(HideFromCapture)] is bool hide) settings.HideFromCapture = hide;
             if (values[nameof(KeyboardNavigation)] is bool keys) settings.KeyboardNavigation = keys;
             if (values[nameof(WatchSelection)] is bool watch) settings.WatchSelection = watch;
+            if (values[nameof(VolumeStep)] is int step) settings.VolumeStep = step;
+            if (values[nameof(IconColor)] is string iconColor) settings.IconColor = iconColor;
+            if (values[nameof(IconSize)] is int iconSize) settings.IconSize = iconSize;
+            if (values[nameof(BadgesMatchIcons)] is bool badges) settings.BadgesMatchIcons = badges;
+            if (values[nameof(ShowSeparators)] is bool separators) settings.ShowSeparators = separators;
+            if (values[nameof(LiveDetails)] is bool live) settings.LiveDetails = live;
         }
         catch (Exception ex)
         {

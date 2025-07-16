@@ -10,11 +10,13 @@ public sealed record Unit(string Name, string Symbol, double Factor, double Offs
 
 public sealed record UnitCategory(string Name, Unit[] Units);
 
-public sealed record DetectedValue(double Amount, string? Currency, string? Category, string? Unit);
+public sealed record DetectedValue(double Amount, string? Currency, string? Category, string? Unit, string? Time = null);
+
+public sealed record ParsedTime(DateTimeOffset Moment, TimeZoneInfo Zone, string ZoneLabel);
 
 public sealed partial class ConvertService
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 1_000_000 };
     private static readonly TimeSpan RatesMaxAge = TimeSpan.FromHours(12);
 
     private readonly string? _cachePath;
@@ -74,10 +76,28 @@ public sealed partial class ConvertService
         return baseValue / to.Factor - to.Offset;
     }
 
+    // A short phrase like "costs $250 a month" still counts when it holds one clear value.
+    // Single-letter units and "in" are skipped inside phrases, so "version 3 in" isn't 3 inches.
     public DetectedValue? Detect(string text)
     {
         text = text.Trim();
-        if (text.Length is 0 or > 40) return null;
+        if (text.Length is 0 or > 80) return null;
+        if (DetectExact(text) is { } exact) return exact;
+        if (text.Contains('\n') || text.Contains('\r')) return null;
+
+        foreach (Match match in EmbeddedValueRegex().Matches(text))
+        {
+            var unit = match.Groups["unit"].Value;
+            var unclear = unit.Length == 1 || unit.Equals("in", StringComparison.OrdinalIgnoreCase);
+            if (!unclear && DetectExact(match.Value.Trim()) is { } whole) return whole;
+            if (DetectExact(match.Groups["core"].Value.Trim()) is { Currency: not null } price) return price;
+        }
+        return null;
+    }
+
+    private DetectedValue? DetectExact(string text)
+    {
+        if (text.Length > 40) return null;
 
         var price = PriceRegex().Match(text);
         if (price.Success)
@@ -87,8 +107,83 @@ public sealed partial class ConvertService
             if (currency is not null && TryNumber(price.Groups["num"].Value, out var amount)) return new(amount, currency, null, null);
         }
 
-        return ParseMeasure(text) is { } measure ? new(measure.Value, null, measure.Category.Name, measure.Unit.Symbol) : null;
+        if (ParseMeasure(text) is { } measure) return new(measure.Value, null, measure.Category.Name, measure.Unit.Symbol);
+        return ParseTime(text, strict: true) is { } time ? new(0, null, "Time", time.ZoneLabel, text) : null;
     }
+
+    private static readonly Dictionary<string, string> ZoneAbbreviations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["UTC"] = "UTC", ["GMT"] = "UTC", ["Z"] = "UTC",
+        ["ET"] = "Eastern Standard Time", ["EST"] = "Eastern Standard Time", ["EDT"] = "Eastern Standard Time",
+        ["CT"] = "Central Standard Time", ["CST"] = "Central Standard Time", ["CDT"] = "Central Standard Time",
+        ["MT"] = "Mountain Standard Time", ["MST"] = "Mountain Standard Time", ["MDT"] = "Mountain Standard Time",
+        ["PT"] = "Pacific Standard Time", ["PST"] = "Pacific Standard Time", ["PDT"] = "Pacific Standard Time",
+        ["BST"] = "GMT Standard Time", ["CET"] = "W. Europe Standard Time", ["CEST"] = "W. Europe Standard Time",
+        ["IST"] = "India Standard Time", ["JST"] = "Tokyo Standard Time", ["KST"] = "Korea Standard Time",
+        ["SGT"] = "Singapore Standard Time", ["HKT"] = "China Standard Time", ["AEST"] = "AUS Eastern Standard Time",
+        ["AEDT"] = "AUS Eastern Standard Time", ["GST"] = "Arabian Standard Time",
+    };
+
+    // "3 PM EST", "15:30 London", "9am". Strict (used for selections) needs a zone and either
+    // AM/PM or a colon, so plain numbers like "5 GB" or "3 in" are never read as times.
+    public static ParsedTime? ParseTime(string text, bool strict, IEnumerable<string>? knownZones = null)
+    {
+        var match = TimeRegex().Match(text.Trim());
+        if (!match.Success) return null;
+        var hour = int.Parse(match.Groups["h"].Value, CultureInfo.InvariantCulture);
+        var minute = match.Groups["m"].Success ? int.Parse(match.Groups["m"].Value, CultureInfo.InvariantCulture) : 0;
+        var meridiem = match.Groups["ampm"].Value.Replace(".", "").ToLowerInvariant();
+        var zoneText = match.Groups["zone"].Value.Trim();
+        if (strict && (zoneText.Length == 0 || (meridiem.Length == 0 && !match.Groups["m"].Success))) return null;
+        if (minute > 59 || hour > 23 || (meridiem.Length > 0 && (hour is 0 or > 12))) return null;
+        if (meridiem == "pm" && hour < 12) hour += 12;
+        if (meridiem == "am" && hour == 12) hour = 0;
+
+        TimeZoneInfo zone;
+        string label;
+        if (zoneText.Length == 0)
+        {
+            zone = TimeZoneInfo.Local;
+            label = "your time";
+        }
+        else if (FindZone(zoneText, knownZones) is { } found)
+        {
+            zone = found;
+            label = zoneText.Length <= 4 ? zoneText.ToUpperInvariant() : zoneText;
+        }
+        else
+        {
+            return null;
+        }
+
+        var today = TimeZoneInfo.ConvertTime(DateTimeOffset.Now, zone).Date;
+        var local = new DateTime(today.Year, today.Month, today.Day, hour, minute, 0, DateTimeKind.Unspecified);
+        return new ParsedTime(new DateTimeOffset(local, zone.GetUtcOffset(local)), zone, label);
+    }
+
+    private static TimeZoneInfo? FindZone(string text, IEnumerable<string>? knownZones)
+    {
+        try
+        {
+            if (ZoneAbbreviations.TryGetValue(text, out var id)) return TimeZoneInfo.FindSystemTimeZoneById(id);
+            foreach (var known in knownZones ?? [])
+            {
+                var city = known.Contains('/') ? known[(known.LastIndexOf('/') + 1)..].Replace('_', ' ') : known;
+                if (city.Equals(text, StringComparison.OrdinalIgnoreCase)) return TimeZoneInfo.FindSystemTimeZoneById(known);
+            }
+            if (text.Length < 4) return null;
+            return TimeZoneInfo.GetSystemTimeZones().FirstOrDefault(z =>
+                z.DisplayName.Contains(text, StringComparison.OrdinalIgnoreCase) || z.StandardName.Contains(text, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            return null;
+        }
+    }
+
+    [GeneratedRegex(@"^(?<h>\d{1,2})(?::(?<m>\d{2}))?\s*(?<ampm>[ap]\.?m\.?)?(?:\s+(?<zone>[A-Za-z][A-Za-z .'_-]*)|(?<zone>[A-Z]{2,4}))?$", RegexOptions.IgnoreCase)]
+    private static partial Regex TimeRegex();
 
     private static readonly Dictionary<string, string> UnitAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -121,10 +216,12 @@ public sealed partial class ConvertService
     [GeneratedRegex(@"^(?<num>-?\d[\d,]*(\.\d+)?)\s*(?<unit>.+)$")]
     private static partial Regex MeasureRegex();
 
+    private static readonly HashSet<string> CommonCodes = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD", "AED", "CHF", "CNY", "SGD"];
+
     private string? SymbolToCode(string symbol)
     {
         var upper = symbol.ToUpperInvariant();
-        if (Currencies.ContainsKey(upper)) return upper;
+        if (Currencies.ContainsKey(upper) && (symbol == upper || CommonCodes.Contains(upper))) return upper;
         return symbol switch
         {
             "$" or "US$" => "USD",
@@ -202,4 +299,7 @@ public sealed partial class ConvertService
 
     [GeneratedRegex(@"^(?<pre>US\$|A\$|C\$|[$€£¥₹₩₽₺฿₫₱₦]|[A-Za-z]{3}|Rs\.?)?\s?(?<num>\d[\d,]*(\.\d+)?)\s?(?<post>[A-Za-z]{3}|[$€£¥₹])?$")]
     private static partial Regex PriceRegex();
+
+    [GeneratedRegex(@"(?<core>(?:US\$|A\$|C\$|[$€£¥₹₩₽₺฿₫₱₦]|Rs\.?|\b[A-Z]{3}\s)?\s?\d[\d,]*(?:\.\d+)?)(?:\s?(?:°\s?[CFK]\b|[$€£¥₹]|(?<unit>[A-Za-z][A-Za-z/]*)))?")]
+    private static partial Regex EmbeddedValueRegex();
 }

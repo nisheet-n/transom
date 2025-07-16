@@ -52,15 +52,23 @@ public sealed partial class ConvertPanel : UserControl
             _sourceCode = code;
             _sourceAmount = detected.Amount;
             if (!Settings.Currencies.Contains(code)) _extraCode = code;
+            ShowCurrencyInput();
             Tabs.SelectedItem = CurrencyTab;
-            SourceNote.Text = "From your clipboard";
+            SourceNote.Text = "From your selection";
+        }
+        else if (detected is { Time: { } time })
+        {
+            TimeInput.Text = time;
+            Tabs.SelectedItem = TimeTab;
+            SourceNote.Text = "From your selection";
         }
         else if (detected is { Unit: { } unit })
         {
             UnitInput.Text = $"{detected.Amount.ToString("0.####", Culture)} {unit}";
             Tabs.SelectedItem = UnitsTab;
-            SourceNote.Text = "From your clipboard";
+            SourceNote.Text = "From your selection";
         }
+        if (detected is null) ShowCurrencyInput();
         Rebuild();
         _clock?.Start();
 
@@ -71,8 +79,8 @@ public sealed partial class ConvertPanel : UserControl
     public void Closed()
     {
         _clock?.Stop();
-        CurrencySearch.Text = "";
-        TimeSearch.Text = "";
+        CurrencySuggestions.Children.Clear();
+        TimeInput.Text = "";
     }
 
     private void Tabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
@@ -116,6 +124,7 @@ public sealed partial class ConvertPanel : UserControl
                 InputScope = new Microsoft.UI.Xaml.Input.InputScope { Names = { new Microsoft.UI.Xaml.Input.InputScopeName(Microsoft.UI.Xaml.Input.InputScopeNameValue.Number) } },
             };
             box.TextChanged += (_, _) => OnCurrencyTyped(code, box);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, $"Amount in {name}");
             _currencyBoxes[code] = box;
 
             var key = $"cur:{code}";
@@ -136,8 +145,79 @@ public sealed partial class ConvertPanel : UserControl
         if (!TryNumber(box.Text, out var amount)) return;
         _sourceCode = code;
         _sourceAmount = amount;
+        ShowCurrencyInput();
         UpdateCurrencyValues(code);
     }
+
+    // The top box converts "$100", "50 EUR", "₹2,000" or a bare number (in the current currency).
+    // Typing a name instead ("Swiss", "CAD") offers currencies to add to your list.
+    private void CurrencyInput_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_updating || _service is null || CurrencyInput.FocusState == FocusState.Unfocused) return;
+        CurrencySuggestions.Children.Clear();
+        var text = CurrencyInput.Text.Trim();
+        if (text.Length == 0)
+        {
+            CurrencyHint.Text = "";
+            return;
+        }
+
+        if (_service.Detect(text) is { Currency: { } code } detected)
+        {
+            var listChanged = code != _sourceCode && !Settings.Currencies.Contains(code) && code != _extraCode;
+            _sourceCode = code;
+            _sourceAmount = detected.Amount;
+            if (!Settings.Currencies.Contains(code)) _extraCode = code;
+            if (listChanged) BuildCurrencies();
+            else UpdateCurrencyValues(null);
+        }
+        else if (TryNumber(text, out var amount))
+        {
+            _sourceAmount = amount;
+            UpdateCurrencyValues(null);
+        }
+        else
+        {
+            var matches = _service.Currencies
+                .Where(c => !Settings.Currencies.Contains(c.Key)
+                    && (c.Key.Contains(text, StringComparison.OrdinalIgnoreCase) || c.Value.Name.Contains(text, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(c => !c.Key.StartsWith(text, StringComparison.OrdinalIgnoreCase)).ThenBy(c => c.Key)
+                .Take(5).ToList();
+            foreach (var (match, (name, _)) in matches) CurrencySuggestions.Children.Add(Suggestion($"Add {name} · {match}", () => AddCurrency(match)));
+            var listed = Settings.Currencies.FirstOrDefault(c => c.Contains(text, StringComparison.OrdinalIgnoreCase)
+                || (_service.Currencies.TryGetValue(c, out var info) && info.Name.Contains(text, StringComparison.OrdinalIgnoreCase)));
+            CurrencyHint.Text = matches.Count > 0 ? "Pick one to add it to your list."
+                : listed is not null ? $"{CurrencyLabel(listed)} is already in your list."
+                : "Type an amount like $100 or 50 EUR, or a currency like CAD.";
+            return;
+        }
+        CurrencyHint.Text = CurrencyLabel(_sourceCode);
+    }
+
+    private void AddCurrency(string code)
+    {
+        Settings.Currencies.Add(code);
+        Settings.Save();
+        CurrencySuggestions.Children.Clear();
+        BuildCurrencies();
+        ShowCurrencyInput();
+        CurrencyHint.Text = $"Added {CurrencyLabel(code)}.";
+    }
+
+    private void ShowCurrencyInput()
+    {
+        if (_service is null) return;
+        _updating = true;
+        var symbol = _service.Currencies.TryGetValue(_sourceCode, out var info) && info.Symbol.Length <= 2 ? info.Symbol : "";
+        CurrencyInput.Text = symbol.Length > 0
+            ? $"{symbol}{_sourceAmount.ToString("#,0.##", Culture)}"
+            : $"{_sourceAmount.ToString("#,0.##", Culture)} {_sourceCode}";
+        CurrencyHint.Text = CurrencyLabel(_sourceCode);
+        _updating = false;
+    }
+
+    private string CurrencyLabel(string code) =>
+        _service is not null && _service.Currencies.TryGetValue(code, out var info) ? $"{info.Name} · {code}" : code;
 
     private void UpdateCurrencyValues(string? skip)
     {
@@ -152,27 +232,6 @@ public sealed partial class ConvertPanel : UserControl
         _updating = false;
     }
 
-    private void CurrencySearch_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        CurrencySuggestions.Children.Clear();
-        var query = CurrencySearch.Text.Trim();
-        if (_service is null || query.Length == 0) return;
-
-        foreach (var (code, (name, _)) in _service.Currencies
-            .Where(c => !Settings.Currencies.Contains(c.Key)
-                && (c.Key.Contains(query, StringComparison.OrdinalIgnoreCase) || c.Value.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(c => c.Key).Take(5))
-        {
-            CurrencySuggestions.Children.Add(Suggestion($"{code} · {name}", () =>
-            {
-                Settings.Currencies.Add(code);
-                Settings.Save();
-                CurrencySearch.Text = "";
-                BuildCurrencies();
-            }));
-        }
-    }
-
     // Units: one free-text box ("5 ft", "30 °C", "2 GB"); the category is worked out from the unit.
     private void UnitInput_TextChanged(object sender, TextChangedEventArgs e) => BuildUnits();
 
@@ -182,7 +241,7 @@ public sealed partial class ConvertPanel : UserControl
         if (ConvertService.ParseMeasure(UnitInput.Text) is not { } measure)
         {
             UnitHint.Text = UnitInput.Text.Trim().Length == 0
-                ? "Works with length, weight, temperature, volume, speed and data sizes."
+                ? "Type a value to see it in other units."
                 : "Add a unit after the number, like 5 ft, 70 kg or 30 °C.";
             return;
         }
@@ -197,45 +256,52 @@ public sealed partial class ConvertPanel : UserControl
         }
     }
 
+    private void TimeInput_TextChanged(object sender, TextChangedEventArgs e) => BuildTimes();
+
+    // A time in the top box ("3 PM EST") shows that moment in every row; a place name with no
+    // time ("Tokyo") offers zones to add; an empty box shows the time now.
     private void BuildTimes()
     {
         TimeRows.Children.Clear();
-        var now = DateTimeOffset.Now;
-        TimeRows.Children.Add(Row("You", now.ToString("h:mm tt"), $"Your time · {TimeZoneInfo.Local.StandardName}", false, null, null));
+        TimeSuggestions.Children.Clear();
+        var typed = TimeInput.Text.Trim();
+        var parsed = typed.Length == 0 ? null : ConvertService.ParseTime(typed, strict: false, Settings.TimeZones);
+        if (typed.Length == 0) TimeHint.Text = "Showing the time now.";
+        else if (parsed is not null) TimeHint.Text = $"{parsed.Moment:h:mm tt, ddd d MMM} · {parsed.ZoneLabel}";
+        else if (!typed.Any(char.IsDigit) && Zones.Search(typed, Settings.TimeZones) is { Count: > 0 } zones)
+        {
+            foreach (var (id, label) in zones) TimeSuggestions.Children.Add(Suggestion($"Add {label}", () => AddZone(id)));
+            TimeHint.Text = "Pick one to add it to your list.";
+        }
+        else if (!typed.Any(char.IsDigit) && Settings.TimeZones.FirstOrDefault(z => z.Contains(typed, StringComparison.OrdinalIgnoreCase)) is { } listed)
+            TimeHint.Text = $"{listed[(listed.LastIndexOf('/') + 1)..].Replace('_', ' ')} is already in your list.";
+        else TimeHint.Text = "Type a time like 3 PM EST or 15:30 London, or a city like Tokyo.";
+
+        var now = parsed is { } p ? TimeZoneInfo.ConvertTime(p.Moment, TimeZoneInfo.Local) : DateTimeOffset.Now;
+        var yourDay = parsed is null ? "Your time" : now.ToString("ddd d MMM");
+        TimeRows.Children.Add(Row("You", now.ToString("h:mm tt"), $"{yourDay} · {TimeZoneInfo.Local.StandardName}", false, null, null));
 
         foreach (var id in PinnedFirst(Settings.TimeZones.ToList(), z => $"tz:{z}"))
         {
-            if (!TryZone(id, out var zone)) continue;
+            if (!Zones.TryFind(id, out var zone)) continue;
             var there = TimeZoneInfo.ConvertTime(now, zone);
             var diff = there.Offset - now.Offset;
-            var diffText = diff == TimeSpan.Zero ? "same time" : $"{(diff < TimeSpan.Zero ? "−" : "+")}{diff.Duration():h\\:mm}";
-            var day = there.Date == now.Date ? "today" : there.Date > now.Date ? "tomorrow" : "yesterday";
+            var diffText = Zones.Offset(diff);
+            var day = parsed is not null ? there.ToString("ddd d MMM") : there.Date == now.Date ? "today" : there.Date > now.Date ? "tomorrow" : "yesterday";
             var key = $"tz:{id}";
             var time = there.ToString("h:mm tt");
             var menu = RowMenu(key, () => time, removable: true, onRemove: () => Settings.TimeZones.Remove(id));
-            TimeRows.Children.Add(Row(ZoneBadge(diff), $"{ZoneName(zone, id)}  {time}", $"{day} · {diffText}", IsPinned(key), null, menu));
+            TimeRows.Children.Add(Row(ZoneBadge(diff), $"{Zones.Name(zone, id)}  {time}", $"{day} · {diffText}", IsPinned(key), null, menu));
         }
     }
 
-    private void TimeSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private void AddZone(string id)
     {
-        TimeSuggestions.Children.Clear();
-        var query = TimeSearch.Text.Trim();
-        if (query.Length == 0) return;
-
-        foreach (var zone in TimeZoneInfo.GetSystemTimeZones()
-            .Where(z => !Settings.TimeZones.Contains(z.Id)
-                && (z.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) || z.Id.Contains(query, StringComparison.OrdinalIgnoreCase)))
-            .Take(5))
-        {
-            TimeSuggestions.Children.Add(Suggestion(zone.DisplayName, () =>
-            {
-                Settings.TimeZones.Add(zone.Id);
-                Settings.Save();
-                TimeSearch.Text = "";
-                BuildTimes();
-            }));
-        }
+        Settings.TimeZones.Add(id);
+        Settings.Save();
+        TimeInput.Text = "";
+        BuildTimes();
+        TimeHint.Text = "Added. Type a time to compare, like 3 PM EST.";
     }
 
     private FrameworkElement Row(string badge, string title, string subtitle, bool pinned, FrameworkElement? input, MenuFlyout? menu)
@@ -292,6 +358,7 @@ public sealed partial class ConvertPanel : UserControl
                 Flyout = menu,
             };
             ToolTipService.SetToolTip(more, "More");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, $"More options for {title.Split("  ")[0]}");
             Grid.SetColumn(more, 3);
             grid.Children.Add(more);
             grid.ContextFlyout = menu;
@@ -317,7 +384,7 @@ public sealed partial class ConvertPanel : UserControl
         {
             var package = new DataPackage();
             package.SetText(value());
-            Clipboard.SetContent(package);
+            ClipboardWriter.TrySet(package);
         };
         menu.Items.Add(copy);
 
@@ -342,8 +409,18 @@ public sealed partial class ConvertPanel : UserControl
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
-            Content = new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis },
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Children =
+                {
+                    new FontIcon { Glyph = "", FontSize = 12 },
+                    new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis },
+                },
+            },
         };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, text);
         button.Click += (_, _) => onPick();
         return button;
     }
@@ -364,7 +441,7 @@ public sealed partial class ConvertPanel : UserControl
         || double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
     private static string FormatNumber(double value) =>
-        Math.Abs(value) >= 1000 ? value.ToString("N2", Culture) : value.ToString("0.####", Culture);
+        Math.Abs(value) >= 1000 ? value.ToString("#,0.##", Culture) : value.ToString("0.####", Culture);
 
     private static string Ago(DateTimeOffset when)
     {
@@ -373,31 +450,6 @@ public sealed partial class ConvertPanel : UserControl
         if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
         if (span.TotalHours < 24) return $"{(int)span.TotalHours} hr ago";
         return when.ToString("d MMM");
-    }
-
-    private static bool TryZone(string id, out TimeZoneInfo zone)
-    {
-        try
-        {
-            zone = TimeZoneInfo.FindSystemTimeZoneById(id);
-            return true;
-        }
-        catch (Exception)
-        {
-            zone = TimeZoneInfo.Utc;
-            return false;
-        }
-    }
-
-    private static string ZoneName(TimeZoneInfo zone, string id)
-    {
-        if (id.Contains('/')) return id[(id.LastIndexOf('/') + 1)..].Replace('_', ' ');
-        if (id == "UTC") return "UTC";
-        var display = zone.DisplayName;
-        var close = display.IndexOf(')');
-        var name = close >= 0 ? display[(close + 1)..].Trim() : display;
-        var comma = name.IndexOf(',');
-        return comma > 0 ? name[..comma] : name;
     }
 
     private static string ZoneBadge(TimeSpan diff)
