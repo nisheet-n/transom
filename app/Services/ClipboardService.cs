@@ -33,6 +33,8 @@ public sealed class ClipboardService
     private readonly string? _folder;
     private bool _ignoreNext;
     private bool _reading;
+    private string? _pendingJson;
+    private int _writing;
 
     public event Action? Changed;
 
@@ -96,7 +98,7 @@ public sealed class ClipboardService
         var package = new DataPackage();
         if (item.Kind == ClipKind.Image && item.ImageFile is not null && _folder is not null)
         {
-            var file = await StorageFile.GetFileFromPathAsync(Path.Combine(_folder, item.ImageFile));
+            var file = await StorageFile.GetFileFromPathAsync(Path.Combine(_folder, Path.GetFileName(item.ImageFile)));
             package.SetBitmap(RandomAccessStreamReference.CreateFromFile(file));
         }
         else
@@ -104,13 +106,13 @@ public sealed class ClipboardService
             package.SetText(item.Text);
         }
         _ignoreNext = true;
-        Clipboard.SetContent(package);
+        ClipboardWriter.TrySet(package);
         item.Copied = DateTimeOffset.Now;
         SaveAndNotify();
     }
 
     public string? ImagePath(ClipItem item) =>
-        item.ImageFile is not null && _folder is not null ? Path.Combine(_folder, item.ImageFile) : null;
+        item.ImageFile is not null && _folder is not null ? Path.Combine(_folder, Path.GetFileName(item.ImageFile)) : null;
 
     public void TogglePin(string id)
     {
@@ -219,20 +221,42 @@ public sealed class ClipboardService
         }
     }
 
+    // History can reach several MB, so the file is written off the UI thread. Only the newest
+    // snapshot matters: a save that arrives while one is being written replaces the queued one.
     private void SaveAndNotify()
     {
         if (_folder is not null)
         {
-            try
-            {
-                File.WriteAllText(Path.Combine(_folder, "history.json"), JsonSerializer.Serialize(_items, ClipJson.Default.ListClipItem));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-            }
+            Volatile.Write(ref _pendingJson, JsonSerializer.Serialize(_items, ClipJson.Default.ListClipItem));
+            if (Interlocked.Exchange(ref _writing, 1) == 0) _ = Task.Run(WritePending);
         }
         Changed?.Invoke();
+    }
+
+    private void WritePending()
+    {
+        do
+        {
+            while (Interlocked.Exchange(ref _pendingJson, null) is { } json)
+            {
+                try
+                {
+                    SafeFile.Write(Path.Combine(_folder!, "history.json"), json);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+            }
+            Volatile.Write(ref _writing, 0);
+        }
+        while (Volatile.Read(ref _pendingJson) is not null && Interlocked.Exchange(ref _writing, 1) == 0);
+    }
+
+    public void Flush()
+    {
+        while (Volatile.Read(ref _writing) == 1) Thread.Sleep(10);
+        if (Interlocked.Exchange(ref _pendingJson, null) is { } json && _folder is not null) SafeFile.Write(Path.Combine(_folder, "history.json"), json);
     }
 
     private List<ClipItem> Load()
@@ -245,6 +269,7 @@ public sealed class ClipboardService
         }
         catch (Exception ex)
         {
+            if (ex is JsonException && _folder is not null) SafeFile.SetAside(Path.Combine(_folder, "history.json"));
             Debug.WriteLine(ex);
         }
         return [];

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Transom.Controls.MeetingPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Width="340" Spacing="12">
+        <StackPanel Spacing="2">
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="In a call" />
+            <TextBlock x:Name="Source" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+        </StackPanel>
+
+        <Button
+            x:Name="MuteButton"
+            Height="56"
+            HorizontalAlignment="Stretch"
+            Click="Mute_Click">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <FontIcon x:Name="MuteIcon" FontSize="18" Glyph="&#xE720;" />
+                <TextBlock x:Name="MuteText" VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Mute microphone" />
+            </StackPanel>
+        </Button>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="CameraButton" HorizontalAlignment="Stretch" Click="Camera_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xE714;" />
+                    <TextBlock x:Name="CameraText" Text="Camera" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="LeaveButton"
+                Grid.Column="1"
+                HorizontalAlignment="Stretch"
+                Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                Click="Leave_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Glyph="&#xE778;" />
+                    <TextBlock Text="Leave call" />
+                </StackPanel>
+            </Button>
+        </Grid>
+        <Button HorizontalAlignment="Stretch" Click="GoTo_Click">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon FontSize="14" Glyph="&#xE8A7;" />
+                <TextBlock x:Name="GoToText" Text="Go to call" />
+            </StackPanel>
+        </Button>
+
+        <TextBlock
+            x:Name="Hint"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

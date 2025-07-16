@@ -34,7 +34,7 @@
         </Grid>
 
         <TextBox
-            x:Name="Editor"
+            x:Name="Editor" AutomationProperties.Name="Note"
             Height="190"
             AcceptsReturn="True"
             FontSize="14"
@@ -51,7 +51,7 @@
 
         <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-        <TextBox x:Name="Search" PlaceholderText="Search notes" TextChanged="Search_TextChanged" />
+        <TextBox x:Name="Search" AutomationProperties.Name="Search notes" PlaceholderText="Search notes" TextChanged="Search_TextChanged" />
         <ScrollViewer MaxHeight="300">
             <StackPanel x:Name="NoteList" Spacing="2" />
         </ScrollViewer>

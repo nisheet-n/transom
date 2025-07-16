@@ -174,7 +174,7 @@ public sealed partial class NotesPanel : UserControl
         {
             var package = new DataPackage();
             package.SetText(note.Text.ReplaceLineEndings("\r\n"));
-            Clipboard.SetContent(package);
+            ClipboardWriter.TrySet(package);
         };
         menu.Items.Add(copy);
 

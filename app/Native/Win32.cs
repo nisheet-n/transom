@@ -180,20 +180,33 @@ internal static partial class Win32
     [LibraryImport("user32.dll")]
     public static partial short GetAsyncKeyState(int vKey);
 
-    public static unsafe void SendCtrlV()
-    {
-        var keys = new[] { (VK_CONTROL, 0u), (VK_V, 0u), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP) };
-        var inputs = stackalloc INPUT[keys.Length];
-        for (var i = 0; i < keys.Length; i++)
-        {
-            inputs[i] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = keys[i].Item1, dwFlags = keys[i].Item2 } } };
-        }
-        SendInput((uint)keys.Length, inputs, sizeof(INPUT));
-    }
+    public static void SendCtrlV() => SendChord([VK_CONTROL, VK_V]);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetWindowRect(nint hWnd, out RECT lpRect);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ClientToScreen(nint hWnd, ref POINT lpPoint);
+
+    public const int SM_CYCAPTION = 4, SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetSystemMetricsForDpi(int nIndex, uint dpi);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDpiForWindow(nint hwnd);
+
+    // Height of a standard Windows title bar (caption plus resize frame and padding) in DIPs,
+    // from the system's own metrics, so it follows display scaling and title bar size settings.
+    public static double TitleBarHeight(nint hwnd)
+    {
+        var dpi = GetDpiForWindow(hwnd);
+        if (dpi == 0) dpi = 96;
+        var pixels = GetSystemMetricsForDpi(SM_CYCAPTION, dpi) + GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        return pixels * 96.0 / dpi;
+    }
 
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmGetWindowAttribute(nint hwnd, uint dwAttribute, ref int pvAttribute, int cbAttribute);
@@ -276,16 +289,18 @@ internal static partial class Win32
     [LibraryImport("kernel32.dll")]
     public static partial nuint GlobalSize(nint hMem);
 
-    public static unsafe void SendCtrlC()
+    public static unsafe void SendChord(ushort[] keys)
     {
-        var keys = new[] { (VK_CONTROL, 0u), ((ushort)0x43, 0u), ((ushort)0x43, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP) };
-        var inputs = stackalloc INPUT[keys.Length];
+        var inputs = stackalloc INPUT[keys.Length * 2];
         for (var i = 0; i < keys.Length; i++)
         {
-            inputs[i] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = keys[i].Item1, dwFlags = keys[i].Item2 } } };
+            inputs[i] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = keys[i] } } };
+            inputs[keys.Length * 2 - 1 - i] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = keys[i], dwFlags = KEYEVENTF_KEYUP } } };
         }
-        SendInput((uint)keys.Length, inputs, sizeof(INPUT));
+        SendInput((uint)(keys.Length * 2), inputs, sizeof(INPUT));
     }
+
+    public static void SendCtrlC() => SendChord([VK_CONTROL, 0x43]);
 
     public static nint SetWindowProc(nint hWnd, nint proc) =>
         IntPtr.Size == 8 ? SetWindowLongPtr64(hWnd, GWLP_WNDPROC, proc) : SetWindowLong(hWnd, GWLP_WNDPROC, (int)proc);

@@ -18,6 +18,8 @@ public sealed partial class CapturePanel : UserControl
 
     public event Action? NewCaptureRequested;
 
+    public event Action? EditorClosed;
+
     public CapturePanel()
     {
         InitializeComponent();
@@ -49,6 +51,19 @@ public sealed partial class CapturePanel : UserControl
 
     private void NewCapture_Click(object sender, RoutedEventArgs e) => NewCaptureRequested?.Invoke();
 
+    private void Edit_Click(object sender, RoutedEventArgs e) => OpenEditor(pickColor: false);
+
+    private void PickColor_Click(object sender, RoutedEventArgs e) => OpenEditor(pickColor: true);
+
+    private void OpenEditor(bool pickColor)
+    {
+        if (_imagePath is null) return;
+        var editor = new CaptureEditor(_imagePath, pickColor);
+        editor.Flattened += path => DispatcherQueue.TryEnqueue(async () => await ShowAsync(path));
+        editor.Closed += (_, _) => EditorClosed?.Invoke();
+        editor.Activate();
+    }
+
     private async void CopyText_Click(object sender, RoutedEventArgs e)
     {
         if (_imagePath is null) return;
@@ -64,7 +79,7 @@ public sealed partial class CapturePanel : UserControl
             }
             var package = new DataPackage();
             package.SetText(text);
-            Clipboard.SetContent(package);
+            ClipboardWriter.TrySet(package);
             OcrText.Text = text;
             OcrText.Visibility = Visibility.Visible;
             var lines = text.Split('\n').Length;

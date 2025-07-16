@@ -121,7 +121,7 @@ public sealed class NoteStore
             try
             {
                 var keep = _notes.Where(n => !string.IsNullOrWhiteSpace(n.Text)).ToList();
-                File.WriteAllText(_path, JsonSerializer.Serialize(keep, NoteJson.Default.ListNote));
+                SafeFile.Write(_path, JsonSerializer.Serialize(keep, NoteJson.Default.ListNote));
             }
             catch (Exception ex)
             {
@@ -140,6 +140,7 @@ public sealed class NoteStore
         }
         catch (Exception ex)
         {
+            if (ex is JsonException) SafeFile.SetAside(_path!);
             Debug.WriteLine(ex);
         }
         return [];

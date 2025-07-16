@@ -34,8 +34,16 @@ public sealed partial class ShelfPanel : UserControl
     public static async Task<List<string>> ReadDroppedPathsAsync(DataPackageView view)
     {
         if (!view.Contains(StandardDataFormats.StorageItems)) return [];
-        var items = await view.GetStorageItemsAsync();
-        return items.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
+        try
+        {
+            var items = await view.GetStorageItemsAsync();
+            return items.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            return [];
+        }
     }
 
     private void Panel_DragOver(object sender, DragEventArgs e)
@@ -57,8 +65,15 @@ public sealed partial class ShelfPanel : UserControl
         var picker = new FileOpenPicker { ViewMode = PickerViewMode.List };
         picker.FileTypeFilter.Add("*");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
-        var files = await picker.PickMultipleFilesAsync();
-        _shelf?.Add(files.Select(f => f.Path));
+        try
+        {
+            var files = await picker.PickMultipleFilesAsync();
+            _shelf?.Add(files.Select(f => f.Path));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+        }
     }
 
     private void Clear_Click(object sender, RoutedEventArgs e) => _shelf?.Clear();
@@ -178,7 +193,7 @@ public sealed partial class ShelfPanel : UserControl
             if (await StorageItemAsync(item) is not { } storage) return;
             var package = new DataPackage();
             package.SetStorageItems([storage]);
-            Clipboard.SetContent(package);
+            ClipboardWriter.TrySet(package);
         }, item.Exists);
         menu.Items.Add(new MenuFlyoutSeparator());
         Add("Remove from shelf", "", () => _shelf?.Remove(item.Id));
@@ -210,7 +225,7 @@ public sealed partial class ShelfPanel : UserControl
         }
     }
 
-    private static async Task<IStorageItem?> StorageItemAsync(ShelfItem item)
+    internal static async Task<IStorageItem?> StorageItemAsync(ShelfItem item)
     {
         try
         {
@@ -225,7 +240,7 @@ public sealed partial class ShelfPanel : UserControl
         }
     }
 
-    private static async Task LoadThumbnailAsync(ShelfItem item, Image target)
+    internal static async Task LoadThumbnailAsync(ShelfItem item, Image target)
     {
         try
         {

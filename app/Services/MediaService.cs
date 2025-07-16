@@ -57,19 +57,24 @@ public sealed class MediaService
         }
     }
 
-    public async Task TogglePlayPauseAsync()
-    {
-        if (_session is not null) await _session.TryTogglePlayPauseAsync();
-    }
+    public Task TogglePlayPauseAsync() => Send(s => s.TryTogglePlayPauseAsync().AsTask());
 
-    public async Task NextAsync()
-    {
-        if (_session is not null) await _session.TrySkipNextAsync();
-    }
+    public Task NextAsync() => Send(s => s.TrySkipNextAsync().AsTask());
 
-    public async Task PreviousAsync()
+    public Task PreviousAsync() => Send(s => s.TrySkipPreviousAsync().AsTask());
+
+    // A player can close between the click and the call; that shouldn't take Transom down with it.
+    private async Task Send(Func<GlobalSystemMediaTransportControlsSession, Task<bool>> command)
     {
-        if (_session is not null) await _session.TrySkipPreviousAsync();
+        if (_session is not { } session) return;
+        try
+        {
+            await command(session);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+        }
     }
 
     private async Task AttachAsync()

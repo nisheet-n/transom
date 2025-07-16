@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Transom.Native;
 
+using static Transom.Native.Com;
+
 namespace Transom.Services;
 
 // Reads the text selected in whatever app has focus, through UI Automation (the same API screen
@@ -11,10 +13,16 @@ namespace Transom.Services;
 public sealed unsafe class SelectionWatcher : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14;
-    private const nint WM_KEYUP = 0x0101, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202;
+    private const nint WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202;
     private const uint WM_QUIT = 0x0012, COINIT_MULTITHREADED = 0, CLSCTX_INPROC_SERVER = 1;
     private const int UIA_TextPatternId = 10014, MaxText = 100_000;
-    private const string HiddenTextEditor = "native-edit-context";
+    private const string HiddenTextEditor = "native-edit-context", TerminalInput = "xterm-helper-textarea";
+
+    private static readonly HashSet<string> NoCopyWindows =
+    [
+        "CabinetWClass", "ExploreWClass", "ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "PseudoConsoleWindow",
+        "mintty", "VirtualConsoleClass", "PuTTY", "XLMAIN", "TscShellContainerClass",
+    ];
 
     private static readonly Guid CLSID_CUIAutomation = new("FF48DBA4-60EF-4201-AA87-54103EEF594E");
     private static readonly Guid IID_IUIAutomation = new("30CBE57D-D9D0-452A-AB13-7AC5AC4825EE");
@@ -23,9 +31,13 @@ public sealed unsafe class SelectionWatcher : IDisposable
     private static SelectionWatcher? _instance;
     private static int _downX, _downY;
     private static uint _lastUpTime;
-    private static bool _multiClick;
+    private static bool _multiClick, _shiftSelecting;
     private static long _borrowUntil;
+    private static (string Text, DateTimeOffset Since)? _borrowed;
+
+    private static readonly string[] PasswordManagers = ["KeePass", "1Password", "Bitwarden", "LastPass", "Dashlane", "Enpass", "NordPass", "ProtonPass", "RoboForm", "Keeper"];
     private int _gesture;
+    private bool _emptyPattern, _retried;
 
     private readonly DispatcherQueue _dispatcher;
     private readonly Timer _timer;
@@ -55,6 +67,10 @@ public sealed unsafe class SelectionWatcher : IDisposable
     }
 
     public string? Current => _last;
+
+    public nint Source { get; private set; }
+
+    public void Clear() => Publish(null);
 
     private void Start()
     {
@@ -108,13 +124,26 @@ public sealed unsafe class SelectionWatcher : IDisposable
         return Win32.CallNextHookEx(0, code, wParam, lParam);
     }
 
+    // Shift on its own is just a capital letter; only Shift with arrows, Home/End or Page keys selects.
     [UnmanagedCallersOnly]
     private static nint KeyboardProc(int code, nint wParam, nint lParam)
     {
-        if (code >= 0 && wParam == WM_KEYUP)
+        if (code >= 0)
         {
             var vk = *(uint*)lParam;
-            if (vk is 0x10 or 0xA0 or 0xA1 || (vk == 0x41 && IsDown(Win32.VK_CONTROL))) _instance?.Schedule(true);
+            if (wParam == WM_KEYDOWN && vk is >= 0x21 and <= 0x28 && IsDown(Win32.VK_SHIFT)) _shiftSelecting = true;
+            if (wParam == WM_KEYUP)
+            {
+                if (vk is 0x10 or 0xA0 or 0xA1 && _shiftSelecting)
+                {
+                    _shiftSelecting = false;
+                    _instance?.Schedule(true);
+                }
+                else if (vk == 0x41 && IsDown(Win32.VK_CONTROL))
+                {
+                    _instance?.Schedule(true);
+                }
+            }
         }
         return Win32.CallNextHookEx(0, code, wParam, lParam);
     }
@@ -123,6 +152,7 @@ public sealed unsafe class SelectionWatcher : IDisposable
 
     private void Schedule(bool gesture)
     {
+        _retried = false;
         Volatile.Write(ref _gesture, gesture ? 1 : 0);
         _timer.Change(180, Timeout.Infinite);
     }
@@ -137,7 +167,27 @@ public sealed unsafe class SelectionWatcher : IDisposable
             var foreground = Win32.GetForegroundWindow();
             Win32.GetWindowThreadProcessId(foreground, out var pid);
             if (foreground == 0 || pid == Environment.ProcessId) return;
-            Publish(ReadSelection(foreground, Interlocked.Exchange(ref _gesture, 0) == 1));
+            var gesture = Interlocked.Exchange(ref _gesture, 0) == 1;
+            _emptyPattern = false;
+            var text = ReadSelection(foreground, gesture);
+
+            // Chromium-based apps update their accessibility tree a moment after a double-click,
+            // so an empty answer right after a selection gesture gets one more look.
+            if (text is null && gesture && _emptyPattern && !_retried)
+            {
+                _retried = true;
+                Volatile.Write(ref _gesture, 1);
+                _timer.Change(400, Timeout.Infinite);
+                return;
+            }
+            _retried = false;
+            if (text is not null) Source = foreground;
+            if (_borrowed is { } borrowed)
+            {
+                _borrowed = null;
+                _dispatcher.TryEnqueue(() => _ = ClipboardHistoryCleanup.ForgetAsync(borrowed.Text, borrowed.Since));
+            }
+            Publish(text);
         }
         catch (Exception ex)
         {
@@ -157,13 +207,14 @@ public sealed unsafe class SelectionWatcher : IDisposable
     }
 
     // Raw vtable calls keep this trimming/AOT friendly. Slot numbers are the method's position
-    // in the UIAutomationClient.h interface, plus 3 for IUnknown.
+    // in the UIAutomationClient.h interface, plus 3 for IUnknown. Web views often focus a
+    // container, so the walk goes up to the nearest element that actually holds text.
     private string? ReadSelection(nint foreground, bool gesture)
     {
         Win32.CoInitializeEx(0, COINIT_MULTITHREADED);
         if (_automation == 0 && Win32.CoCreateInstance(CLSID_CUIAutomation, 0, CLSCTX_INPROC_SERVER, IID_IUIAutomation, out _automation) < 0) return null;
 
-        nint element = 0, pattern = 0, ranges = 0, range = 0, text = 0, className = 0;
+        nint element = 0, walker = 0;
         try
         {
             if (Call(_automation, 8, &element) < 0 || element == 0) return null;
@@ -171,38 +222,102 @@ public sealed unsafe class SelectionWatcher : IDisposable
             int isPassword;
             if (Call(element, 35, &isPassword) >= 0 && isPassword != 0) return null;
 
-            if (Call(element, 30, &className) >= 0 && className != 0 && Marshal.PtrToStringBSTR(className) == HiddenTextEditor)
-                return gesture ? BorrowCopy(foreground) : null;
+            var focusedClass = ClassName(element);
+            if (focusedClass == HiddenTextEditor) return gesture ? BorrowCopy(foreground) : null;
+            if (focusedClass == TerminalInput) return null;
 
-            var iid = IID_IUIAutomationTextPattern;
-            var getPattern = (delegate* unmanaged[Stdcall]<nint, int, Guid*, nint*, int>)Slot(element, 14);
-            if (getPattern(element, UIA_TextPatternId, &iid, &pattern) < 0 || pattern == 0) return null;
-
-            if (Call(pattern, 5, &ranges) < 0 || ranges == 0) return null;
-            int count;
-            if (Call(ranges, 3, &count) < 0 || count == 0) return null;
-            var getElement = (delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(ranges, 4);
-            if (getElement(ranges, 0, &range) < 0 || range == 0) return null;
-
-            var getText = (delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(range, 12);
-            if (getText(range, MaxText, &text) < 0 || text == 0) return null;
-            var value = Marshal.PtrToStringBSTR(text).Trim();
-            return value.Length == 0 ? null : value;
+            Call(_automation, 16, &walker);
+            var getParent = walker == 0 ? null : (delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)Slot(walker, 3);
+            for (var depth = 0; depth < 12 && element != 0; depth++)
+            {
+                if (TrySelectedText(element, out var text))
+                {
+                    _emptyPattern = text is null;
+                    return text;
+                }
+                if (getParent is null) break;
+                nint parent = 0;
+                getParent(walker, element, &parent);
+                Release(element);
+                element = parent;
+            }
+            return gesture && CanBorrow(foreground) ? BorrowCopy(foreground) : null;
         }
         finally
         {
-            if (text != 0) Win32.SysFreeString(text);
-            if (className != 0) Win32.SysFreeString(className);
-            Release(range);
-            Release(ranges);
-            Release(pattern);
             Release(element);
+            Release(walker);
         }
     }
 
-    // VS Code and other Monaco editors hide their text from UI Automation unless screen reader
-    // mode is on, so for them the selection is copied and the clipboard is put back right after.
-    // Skipped while any modifier is held, since Ctrl+Shift+C or Ctrl+Alt+C mean something else.
+    // True when the element exposes text at all; text is its selection, or null when nothing is selected.
+    private static bool TrySelectedText(nint element, out string? text)
+    {
+        text = null;
+        nint pattern = 0, ranges = 0, range = 0, bstr = 0;
+        try
+        {
+            var iid = IID_IUIAutomationTextPattern;
+            var getPattern = (delegate* unmanaged[Stdcall]<nint, int, Guid*, nint*, int>)Slot(element, 14);
+            if (getPattern(element, UIA_TextPatternId, &iid, &pattern) < 0 || pattern == 0) return false;
+
+            int count;
+            if (Call(pattern, 5, &ranges) < 0 || ranges == 0 || Call(ranges, 3, &count) < 0 || count == 0) return true;
+            var getElement = (delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(ranges, 4);
+            if (getElement(ranges, 0, &range) < 0 || range == 0) return true;
+
+            var getText = (delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(range, 12);
+            if (getText(range, MaxText, &bstr) < 0 || bstr == 0) return true;
+            var value = Marshal.PtrToStringBSTR(bstr).Trim();
+            text = value.Length == 0 ? null : value;
+            return true;
+        }
+        finally
+        {
+            if (bstr != 0) Win32.SysFreeString(bstr);
+            Release(range);
+            Release(ranges);
+            Release(pattern);
+        }
+    }
+
+    private static string? ClassName(nint element)
+    {
+        nint bstr = 0;
+        if (Call(element, 30, &bstr) < 0 || bstr == 0) return null;
+        try
+        {
+            return Marshal.PtrToStringBSTR(bstr);
+        }
+        finally
+        {
+            Win32.SysFreeString(bstr);
+        }
+    }
+
+    // Ctrl+C isn't "copy" everywhere: it stops commands in terminals, copies files in Explorer,
+    // leaves Excel's marching ants and goes to the remote PC in Remote Desktop.
+    private static bool CanBorrow(nint window)
+    {
+        if (ShellForegroundWatcher.IsShellWindow(window) || ShellForegroundWatcher.CoversWholeMonitor(window)) return false;
+        var buffer = stackalloc char[128];
+        var length = Win32.GetClassName(window, buffer, 128);
+        if (NoCopyWindows.Contains(new string(buffer, 0, length))) return false;
+        Win32.GetWindowThreadProcessId(window, out var pid);
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            return !PasswordManagers.Any(p => process.ProcessName.Contains(p, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Applies when the app hides its text from UI Automation: VS Code's editor always does,
+    // other apps when they don't support it. The selection is copied and the clipboard is put
+    // back right after. Skipped while any modifier is held, since Ctrl+Shift+C means something else.
     private static string? BorrowCopy(nint foreground)
     {
         if (IsDown(Win32.VK_SHIFT) || IsDown(Win32.VK_CONTROL) || IsDown(Win32.VK_MENU) || IsDown(Win32.VK_LWIN) || IsDown(0x5C)) return null;
@@ -222,22 +337,13 @@ public sealed unsafe class SelectionWatcher : IDisposable
             Thread.Sleep(30);
             var text = ClipboardSnapshot.ReadText()?.Trim();
             snapshot.Restore();
+            if (!string.IsNullOrEmpty(text)) _borrowed = (text, DateTimeOffset.Now.AddSeconds(-3));
             return string.IsNullOrEmpty(text) ? null : text.Length > MaxText ? text[..MaxText] : text;
         }
         finally
         {
             Volatile.Write(ref _borrowUntil, Environment.TickCount64 + 600);
         }
-    }
-
-    private static void* Slot(nint obj, int index) => (*(void***)obj)[index];
-
-    private static int Call<T>(nint obj, int index, T* result) where T : unmanaged =>
-        ((delegate* unmanaged[Stdcall]<nint, T*, int>)Slot(obj, index))(obj, result);
-
-    private static void Release(nint obj)
-    {
-        if (obj != 0) ((delegate* unmanaged[Stdcall]<nint, uint>)Slot(obj, 2))(obj);
     }
 
     public void Dispose()
@@ -249,6 +355,30 @@ public sealed unsafe class SelectionWatcher : IDisposable
         {
             Release(_automation);
             _automation = 0;
+        }
+    }
+}
+
+// Windows' own clipboard history (Win+V) records a borrowed copy; it is removed again so a
+// selection never lingers there or syncs to other devices.
+internal static class ClipboardHistoryCleanup
+{
+    public static async Task ForgetAsync(string text, DateTimeOffset since)
+    {
+        try
+        {
+            await Task.Delay(500);
+            var result = await Windows.ApplicationModel.DataTransfer.Clipboard.GetHistoryItemsAsync();
+            if (result.Status != Windows.ApplicationModel.DataTransfer.ClipboardHistoryItemsResultStatus.Success) return;
+            foreach (var item in result.Items)
+            {
+                if (item.Timestamp < since || !item.Content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)) continue;
+                if ((await item.Content.GetTextAsync()).Trim() == text) Windows.ApplicationModel.DataTransfer.Clipboard.DeleteItemFromHistory(item);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
         }
     }
 }

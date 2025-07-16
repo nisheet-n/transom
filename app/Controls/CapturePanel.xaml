@@ -33,7 +33,32 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <Button Grid.Row="2" HorizontalAlignment="Stretch" Click="Edit_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xEE56;" />
+                    <TextBlock Text="Draw and mark up" />
+                </StackPanel>
+            </Button>
+            <Button Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" Click="PickColor_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xEF3C;" />
+                    <TextBlock Text="Pick a color" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Row="3"
+                Grid.ColumnSpan="2"
+                HorizontalAlignment="Stretch"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Coming with the AI features">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xF2B7;" />
+                    <TextBlock Text="Translate text · coming soon" />
+                </StackPanel>
+            </Button>
             <Button x:Name="CopyTextButton" HorizontalAlignment="Stretch" Click="CopyText_Click">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon FontSize="14" Glyph="&#xE8C1;" />
@@ -78,7 +103,7 @@
             Content="Show in folder"
             Visibility="Collapsed" />
         <TextBox
-            x:Name="OcrText"
+            x:Name="OcrText" AutomationProperties.Name="Text in the screenshot"
             MaxHeight="160"
             AcceptsReturn="True"
             IsReadOnly="True"

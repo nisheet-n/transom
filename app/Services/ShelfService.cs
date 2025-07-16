@@ -87,7 +87,7 @@ public sealed class ShelfService
         {
             try
             {
-                File.WriteAllText(_path, JsonSerializer.Serialize(_items, ShelfJson.Default.ListShelfItem));
+                SafeFile.Write(_path, JsonSerializer.Serialize(_items, ShelfJson.Default.ListShelfItem));
             }
             catch (Exception ex)
             {
@@ -106,6 +106,7 @@ public sealed class ShelfService
         }
         catch (Exception ex)
         {
+            if (ex is JsonException) SafeFile.SetAside(_path!);
             Debug.WriteLine(ex);
         }
         return [];

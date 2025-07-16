@@ -85,7 +85,7 @@ public sealed class ReminderStore
         {
             try
             {
-                File.WriteAllText(_path, JsonSerializer.Serialize(_items, ReminderJson.Default.ListReminder));
+                SafeFile.Write(_path, JsonSerializer.Serialize(_items, ReminderJson.Default.ListReminder));
             }
             catch (Exception ex)
             {
@@ -104,6 +104,7 @@ public sealed class ReminderStore
         }
         catch (Exception ex)
         {
+            if (ex is JsonException) SafeFile.SetAside(_path!);
             Debug.WriteLine(ex);
         }
         return [];

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Transom.Controls.VolumePanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Width="340" Spacing="10">
+        <TextBlock FontSize="16" FontWeight="SemiBold" Text="Volume" />
+
+        <Border
+            Padding="12,8"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="36" />
+                </Grid.ColumnDefinitions>
+                <Button
+                    x:Name="MasterMute"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    AutomationProperties.Name="Mute all sound"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="MasterMute_Click">
+                    <FontIcon x:Name="MasterIcon" FontSize="16" Glyph="&#xE767;" />
+                </Button>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="All sound" />
+                    <Slider
+                        x:Name="MasterSlider"
+                        AutomationProperties.Name="Master volume"
+                        Maximum="100"
+                        Minimum="0"
+                        StepFrequency="1"
+                        ValueChanged="MasterSlider_ValueChanged" />
+                </StackPanel>
+                <TextBlock
+                    x:Name="MasterValue"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextAlignment="Right" />
+            </Grid>
+        </Border>
+
+        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Apps" />
+        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="AppRows" Spacing="2" />
+        </ScrollViewer>
+        <TextBlock
+            x:Name="Empty"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="Apps show up here when they play sound."
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>
