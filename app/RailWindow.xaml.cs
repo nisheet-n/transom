@@ -2,6 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Transom.Controls;
@@ -29,9 +30,12 @@ public sealed partial class RailWindow : Window
     private const int NotesHotKey = 2;
     private const int NavHotKeyBase = 11;
     private string _appliedDock = "";
+    private int _appliedIconSize = -1;
     private bool _navKeysOn;
     private readonly NoteStore _notes;
     private readonly ShelfService _shelf = new();
+    private readonly AudioService _audio = new();
+    private readonly MeetingService _meeting;
     private DateTimeOffset? _captureRequested;
     private bool _isLight;
     private SettingsWindow? _settingsWindow;
@@ -40,6 +44,8 @@ public sealed partial class RailWindow : Window
     public RailWindow()
     {
         InitializeComponent();
+        CreateLiveLabels();
+        CreateRailChips();
 
         _media = new MediaService(DispatcherQueue);
         _media.Changed += UpdateMedia;
@@ -76,7 +82,11 @@ public sealed partial class RailWindow : Window
         };
         _shell.ForegroundChanged += foreground =>
         {
-            if (foreground != _hwnd && !ShellForegroundWatcher.IsShellWindow(foreground)) _lastAppWindow = foreground;
+            if (foreground != _hwnd && !ShellForegroundWatcher.IsShellWindow(foreground))
+            {
+                _lastAppWindow = foreground;
+                if (_selection is { } selection && foreground != selection.Source) selection.Clear();
+            }
             UpdateOnTop(foreground);
         };
         _dock.SettingChanged += ApplyLook;
@@ -101,7 +111,19 @@ public sealed partial class RailWindow : Window
         _notes = new NoteStore(DispatcherQueue);
         NotesPanelView.Attach(_notes);
         ShelfPanelView.Attach(_shelf, hwnd);
+        VolumePanelView.Attach(_audio);
+        _meeting = new MeetingService(DispatcherQueue);
+        MeetingPanelView.Attach(_meeting, _audio);
+        MeetingPanelView.MuteChanged += UpdateMeeting;
+        MeetingPanelView.CloseRequested += () => MeetingFlyout.Hide();
+        _meeting.Changed += UpdateMeeting;
+        UpdateMeeting();
         CapturePanelView.Attach(_shelf);
+        CapturePanelView.EditorClosed += () =>
+        {
+            Activate();
+            CaptureFlyout.ShowAt(CaptureButton);
+        };
         CapturePanelView.NewCaptureRequested += () =>
         {
             CaptureFlyout.Hide();
@@ -112,6 +134,8 @@ public sealed partial class RailWindow : Window
         _selection = new SelectionWatcher(DispatcherQueue);
         _selection.Changed += OnSelectionChanged;
         ApplyRailSettings();
+        TopSlots.SizeChanged += (_, _) => SlotsMoved?.Invoke();
+        BottomSlots.SizeChanged += (_, _) => SlotsMoved?.Invoke();
 
         if (SystemBackdrop is RailBackdrop backdrop) backdrop.Connected += ApplyLook;
         RailSettings.Current.Changed += ApplyLook;
@@ -133,8 +157,10 @@ public sealed partial class RailWindow : Window
             Win32.UnregisterHotKey(_hwnd, ClipboardHotKey);
             Win32.UnregisterHotKey(_hwnd, NotesHotKey);
             _notes.SaveNow();
+            _clipboard.Flush();
             Notifications.Unregister();
             _selection?.Dispose();
+            _audio.Dispose();
             _shell.Dispose();
             _dock.Dispose();
         };
@@ -148,10 +174,19 @@ public sealed partial class RailWindow : Window
         Win32.SetWindowDisplayAffinity(_hwnd, settings.HideFromCapture ? Win32.WDA_EXCLUDEFROMCAPTURE : 0);
         if (_selection is not null) _selection.Enabled = settings.WatchSelection;
         if (!_awake.IsOn) AwakeDuration.SelectedIndex = Math.Clamp(settings.AwakeDefault, 0, 3);
+        ApplyIconLook();
 
-        if (settings.Dock == _appliedDock) return;
-        _appliedDock = settings.Dock;
-        ApplyDock(settings.Dock);
+        if (settings.Dock == _appliedDock && settings.IconSize == _appliedIconSize)
+        {
+            UpdateLiveDetails();
+            return;
+        }
+        _appliedIconSize = settings.IconSize;
+        if (settings.Dock != _appliedDock)
+        {
+            _appliedDock = settings.Dock;
+            ApplyDock(settings.Dock);
+        }
         _dock.Layout();
     }
 
@@ -176,7 +211,7 @@ public sealed partial class RailWindow : Window
 
         var orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical;
         TopSlots.Orientation = BottomSlots.Orientation = orientation;
-        TopSlots.Padding = horizontal ? new Thickness(6, 0, 0, 0) : new Thickness(0, 6, 0, 0);
+        ApplyTopSpace();
         BottomSlots.Padding = horizontal ? new Thickness(0, 0, 6, 0) : new Thickness(0, 0, 0, 6);
         TopSlots.VerticalAlignment = BottomSlots.VerticalAlignment = horizontal ? VerticalAlignment.Center : VerticalAlignment.Stretch;
 
@@ -195,8 +230,8 @@ public sealed partial class RailWindow : Window
             Win32.ABE_BOTTOM => (FlyoutPlacementMode.TopEdgeAlignedLeft, FlyoutPlacementMode.TopEdgeAlignedRight),
             _ => (FlyoutPlacementMode.RightEdgeAlignedTop, FlyoutPlacementMode.RightEdgeAlignedBottom),
         };
-        foreach (var flyout in new FlyoutBase[] { MediaFlyout, AiFlyout, ClipboardFlyout, ConvertFlyout, NotesFlyout, ShelfFlyout, CaptureFlyout }) flyout.Placement = start;
-        foreach (var flyout in new FlyoutBase[] { AwakeFlyout, RemindersFlyout, TransomMenu }) flyout.Placement = end;
+        foreach (var flyout in new FlyoutBase[] { MeetingFlyout, MediaFlyout, VolumeFlyout, AiFlyout, ClipboardFlyout, ConvertFlyout, NotesFlyout, CaptureFlyout }) flyout.Placement = start;
+        foreach (var flyout in new FlyoutBase[] { ShelfFlyout, AwakeFlyout, RemindersFlyout, TransomMenu }) flyout.Placement = end;
 
         var tipPlacement = _dock.Edge switch
         {
@@ -205,7 +240,8 @@ public sealed partial class RailWindow : Window
             Win32.ABE_BOTTOM => PlacementMode.Top,
             _ => PlacementMode.Right,
         };
-        foreach (var button in TopSlots.Children.Concat(BottomSlots.Children).OfType<Button>()) ToolTipService.SetPlacement(button, tipPlacement);
+        foreach (var button in Slots(TopSlots).Concat(Slots(BottomSlots)).OfType<Button>()) ToolTipService.SetPlacement(button, tipPlacement);
+        ApplyTools(RailSettings.Current);
     }
 
     private void ApplyTools(RailSettings settings)
@@ -214,6 +250,7 @@ public sealed partial class RailWindow : Window
         static Visibility V(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 
         ArtButton.Visibility = PlayButton.Visibility = V(Show("media"));
+        VolumeButton.Visibility = V(Show("volume"));
         AiButton.Visibility = V(Show("ai"));
         ClipboardButton.Visibility = V(Show("clipboard"));
         ConvertButton.Visibility = V(Show("convert"));
@@ -222,12 +259,14 @@ public sealed partial class RailWindow : Window
         CaptureButton.Visibility = V(Show("capture"));
         AwakeButton.Visibility = V(Show("awake"));
         RemindersButton.Visibility = V(Show("reminders"));
+        if (_meeting is not null) UpdateMeeting();
 
         var firstGroup = Show("ai") || Show("clipboard") || Show("convert");
-        var secondGroup = Show("notes") || Show("shelf") || Show("capture");
-        SepMedia.Visibility = V(Show("media") && (firstGroup || secondGroup));
-        SepTools.Visibility = V(firstGroup && secondGroup);
-        SepMenu.Visibility = V(Show("awake") || Show("reminders"));
+        var secondGroup = Show("notes") || Show("capture");
+        var lines = settings.ShowSeparators;
+        SepMedia.Visibility = V(lines && (Show("media") || Show("volume")) && (firstGroup || secondGroup));
+        SepTools.Visibility = V(lines && firstGroup && secondGroup);
+        SepMenu.Visibility = V(lines && (Show("shelf") || Show("awake") || Show("reminders")));
     }
 
     private void ApplyNavigationKeys(bool on)
@@ -243,7 +282,7 @@ public sealed partial class RailWindow : Window
 
     private void TriggerRailItem(int index)
     {
-        var items = TopSlots.Children.Concat(BottomSlots.Children)
+        var items = Slots(TopSlots).Concat(Slots(BottomSlots))
             .OfType<Button>()
             .Where(b => b.Visibility == Visibility.Visible && b.Opacity > 0.9)
             .ToList();
@@ -293,6 +332,7 @@ public sealed partial class RailWindow : Window
         var saver = settings.SolidOnBatterySaver && PowerManager.EnergySaverStatus == EnergySaverStatus.On;
 
         _isLight = isLight;
+        ApplyIconLook();
         Root.RequestedTheme = isLight ? ElementTheme.Light : ElementTheme.Dark;
         UpdateAwake();
         var solid = (SystemBackdrop as RailBackdrop)?.Apply(settings, taskbar, isLight, saver);
@@ -313,6 +353,7 @@ public sealed partial class RailWindow : Window
 
         var label = string.IsNullOrEmpty(_media.Artist) ? _media.Title : $"{_media.Title} · {_media.Artist}";
         ToolTipService.SetToolTip(ArtButton, _media.HasSession && label.Length > 0 ? label : "Nothing playing");
+        UpdateLiveDetails();
         FlyTitle.Text = _media.HasSession && _media.Title.Length > 0 ? _media.Title : "Nothing playing";
         FlyArtist.Text = _media.Artist;
         FlyArtist.Visibility = _media.Artist.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -381,18 +422,20 @@ public sealed partial class RailWindow : Window
         
         if (!_awake.IsOn)
         {
-            AwakeGlyph.ClearValue(Microsoft.UI.Xaml.Shapes.Shape.StrokeProperty);
+            AwakeGlyph.ClearValue(FontIcon.ForegroundProperty);
             AwakeStatus.Text = "Your PC sleeps as usual.";
             ToolTipService.SetToolTip(AwakeButton, "Keep awake");
+            UpdateLiveDetails();
             return;
         }
 
-        AwakeGlyph.Stroke = accent;
+        AwakeGlyph.Foreground = accent;
         var left = _awake.Remaining;
         AwakeBadgeText.Text = left is { } t ? t.TotalMinutes >= 60 ? $"{(int)Math.Ceiling(t.TotalHours)}h" : $"{(int)Math.Ceiling(t.TotalMinutes)}m" : "∞";
         var when = left is { } r ? $"for {FormatLeft(r)} more" : "until you turn it off";
         AwakeStatus.Text = $"Your PC won't sleep {when}.";
         ToolTipService.SetToolTip(AwakeButton, $"Keeping your PC awake {when}");
+        UpdateLiveDetails();
     }
 
     private void DetectFromClipboard()
@@ -405,7 +448,9 @@ public sealed partial class RailWindow : Window
     {
         _selectedText = text;
         SelectionBadge.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
-        ToolTipService.SetToolTip(AiButton, text is null ? "Selected text · AI coming soon" : $"Selected: {Shorten(text, 60)}");
+        SetTip(AiButton, text is null ? "Selected text · AI coming soon"
+            : LinkTools.Detect(text) is not null ? $"Selected link: {Shorten(text, 60)}\nOpen, shorten or make a QR code"
+            : $"Selected: {Shorten(text, 60)}");
         ShowDetected(text);
     }
 
@@ -413,14 +458,54 @@ public sealed partial class RailWindow : Window
     {
         _detected = text is null ? null : _convert.Detect(text);
         ConvertBadge.Visibility = _detected is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateLiveDetails();
         if (_detected is null)
         {
-            ToolTipService.SetToolTip(ConvertButton, "Convert currency, units and time zones");
+            SetTip(ConvertButton, "Convert currency, units and time zones");
             return;
         }
         var symbol = _detected.Currency is { } code && _convert.Currencies.TryGetValue(code, out var c) ? c.Symbol : _detected.Unit ?? "";
         ConvertBadgeText.Text = symbol.Length > 3 ? symbol[..3] : symbol;
-        ToolTipService.SetToolTip(ConvertButton, $"Convert {text!.Trim()}");
+        var value = _detected.Amount.ToString("#,0.##", System.Globalization.CultureInfo.CurrentCulture);
+        SetTip(ConvertButton, _detected switch
+        {
+            { Time: { } time } => $"Convert {time}",
+            { Currency: not null } => $"Convert {symbol}{value}",
+            _ => $"Convert {value} {_detected.Unit}",
+        });
+    }
+
+    public event Action? SlotsMoved;
+
+    public bool IsVertical => !_dock.IsHorizontal;
+
+    // Screen rectangles (physical pixels) of the visible slots, so Settings can line its
+    // sections up with the icons they belong to.
+    public IReadOnlyList<(string Id, Windows.Foundation.Rect Bounds)> SlotBounds()
+    {
+        var slots = new List<(string, Windows.Foundation.Rect)>();
+        if (Root.XamlRoot is null) return slots;
+        var scale = Root.XamlRoot.RasterizationScale;
+        var origin = new Win32.POINT();
+        Win32.ClientToScreen(_hwnd, ref origin);
+        foreach (var (id, element) in new (string, FrameworkElement)[]
+        {
+            ("media", ArtButton), ("volume", VolumeButton), ("ai", AiButton), ("clipboard", ClipboardButton),
+            ("convert", ConvertButton), ("notes", NotesButton), ("shelf", ShelfButton), ("capture", CaptureButton),
+            ("awake", AwakeButton), ("reminders", RemindersButton), ("about", MenuButton),
+        })
+        {
+            if (element.Visibility != Visibility.Visible || element.ActualHeight == 0) continue;
+            var p = element.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0));
+            slots.Add((id, new Windows.Foundation.Rect(origin.X + p.X * scale, origin.Y + p.Y * scale, element.ActualWidth * scale, element.ActualHeight * scale)));
+        }
+        return slots;
+    }
+
+    private static void SetTip(Button button, string text)
+    {
+        ToolTipService.SetToolTip(button, text);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(button, text);
     }
 
     private static string Shorten(string text, int max)
@@ -439,6 +524,7 @@ public sealed partial class RailWindow : Window
         SelectionInfo.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
         SelectionInfo.Text = text is null ? "" : $"{text.Length:N0} characters";
         SelectionConvertButton.IsEnabled = _detected is not null;
+        ShowLinkTools(text);
     }
 
     private void ShowSelectionStatus(string message)
@@ -452,7 +538,7 @@ public sealed partial class RailWindow : Window
         if (_selectedText is not { } text) return;
         var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
         package.SetText(text);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        ClipboardWriter.TrySet(package);
         ShowSelectionStatus("Copied.");
     }
 
@@ -487,14 +573,46 @@ public sealed partial class RailWindow : Window
 
     private void NotesFlyout_Opened(object sender, object e) => NotesPanelView.Opened();
 
+    private void MeetingFlyout_Opened(object sender, object e) => MeetingPanelView.Opened();
+
+    // The call slot only appears while an app is using the microphone, and shows the mute state.
+    private void UpdateMeeting()
+    {
+        var call = _meeting.Current;
+        var show = call is not null && !RailSettings.Current.HiddenTools.Contains("meeting");
+        MeetingButton.Visibility = SepMeeting.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (call is null)
+        {
+            MeetingFlyout.Hide();
+            return;
+        }
+        var muted = _audio.MicrophoneMuted == true;
+        MeetingIcon.Glyph = muted ? "" : "";
+        MeetingDot.Visibility = muted ? Visibility.Collapsed : Visibility.Visible;
+        SetTip(MeetingButton, muted ? $"{call.Name} · microphone muted" : $"{call.Name} is using your microphone");
+    }
+
+    private void VolumeFlyout_Opened(object sender, object e) => VolumePanelView.Opened();
+
+    private void VolumeFlyout_Closed(object sender, object e) => VolumePanelView.Closed();
+
+    private void VolumeButton_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        var step = RailSettings.Current.VolumeStep / 100f * (e.GetCurrentPoint(VolumeButton).Properties.MouseWheelDelta > 0 ? 1 : -1);
+        var volume = Math.Clamp((_audio.MasterVolume ?? 0) + step, 0, 1);
+        _audio.MasterVolume = volume;
+        SetTip(VolumeButton, $"Volume {Math.Round(volume * 100)} · scroll to change");
+        e.Handled = true;
+    }
+
     private void ShelfFlyout_Opened(object sender, object e) => ShelfPanelView.Opened();
 
     private void UpdateShelfBadge()
     {
         var count = _shelf.Items.Count;
-        ShelfBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ShelfBadgeText.Text = count > 99 ? "99+" : count.ToString();
         ToolTipService.SetToolTip(ShelfButton, count == 0 ? "Shelf: drop files here" : $"Shelf · {count} item{(count == 1 ? "" : "s")}");
+        UpdateRailChips();
     }
 
     private void Root_DragOver(object sender, DragEventArgs e)
@@ -503,13 +621,36 @@ public sealed partial class RailWindow : Window
         e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Link;
         e.DragUIOverride.Caption = "Add to shelf";
         ShelfButton.Background = (Brush)Application.Current.Resources["AccentFillColorSecondaryBrush"];
+        DropGlow.Visibility = Visibility.Visible;
+        _dropGlowTimer?.Stop();
     }
 
-    private void Root_DragLeave(object sender, DragEventArgs e) => ShelfButton.ClearValue(Control.BackgroundProperty);
+    // Moving between slots raises DragLeave too, so the glow only goes once no DragOver
+    // follows for a moment.
+    private void Root_DragLeave(object sender, DragEventArgs e)
+    {
+        if (_dropGlowTimer is null)
+        {
+            _dropGlowTimer = DispatcherQueue.CreateTimer();
+            _dropGlowTimer.Interval = TimeSpan.FromMilliseconds(150);
+            _dropGlowTimer.IsRepeating = false;
+            _dropGlowTimer.Tick += (_, _) => HideDropGlow();
+        }
+        _dropGlowTimer.Start();
+    }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dropGlowTimer;
+
+    private void HideDropGlow()
+    {
+        _dropGlowTimer?.Stop();
+        ShelfButton.ClearValue(Control.BackgroundProperty);
+        DropGlow.Visibility = Visibility.Collapsed;
+    }
 
     private async void Root_Drop(object sender, DragEventArgs e)
     {
-        ShelfButton.ClearValue(Control.BackgroundProperty);
+        HideDropGlow();
         var deferral = e.GetDeferral();
         _shelf.Add(await Controls.ShelfPanel.ReadDroppedPathsAsync(e.DataView));
         deferral.Complete();
@@ -544,7 +685,7 @@ public sealed partial class RailWindow : Window
         ConvertPanelView.Closed();
         _detected = null;
         ConvertBadge.Visibility = Visibility.Collapsed;
-        ToolTipService.SetToolTip(ConvertButton, "Convert currency, units and time zones");
+        SetTip(ConvertButton, "Convert currency, units and time zones");
     }
 
     private string _clipFilter = "all";
@@ -588,9 +729,22 @@ public sealed partial class RailWindow : Window
         if (e.ClickedItem is not Models.ClipRow row) return;
         var item = _clipboard.Items.FirstOrDefault(i => i.Id == row.Id);
         if (item is null) return;
-
-        await _clipboard.PutOnClipboardAsync(item);
         ClipboardFlyout.Hide();
+        await PasteClipAsync(item);
+    }
+
+    // Puts the item on the clipboard and pastes it into the app that was in front before Transom.
+    private async Task PasteClipAsync(ClipItem item)
+    {
+        try
+        {
+            await _clipboard.PutOnClipboardAsync(item);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return;
+        }
         if (_lastAppWindow == 0) return;
 
         Win32.SetForegroundWindow(_lastAppWindow);
@@ -600,6 +754,7 @@ public sealed partial class RailWindow : Window
 
     private void UpdateClipboard()
     {
+        UpdateRailChips();
         if (!ClipboardFlyout.IsOpen && RecentList.ItemsSource is not null) return;
 
         var query = ClipSearch.Text.Trim();
@@ -754,6 +909,7 @@ public sealed partial class RailWindow : Window
             { } t => $"{(int)Math.Round(t.TotalHours)}h",
         };
         ToolTipService.SetToolTip(RemindersButton, next is null ? "Reminders" : $"{next.Text} · {DescribeDue(next.Due, now)}");
+        UpdateLiveDetails();
     }
 
     private static string DescribeDue(DateTimeOffset due, DateTimeOffset now)
@@ -780,40 +936,63 @@ public sealed partial class RailWindow : Window
 
     private async void Previous_Click(object sender, RoutedEventArgs e) => await _media.PreviousAsync();
 
+    // On a side dock the first slot starts below a standard Windows title bar, measured from the
+    // system, so the icons line up with the content of maximized windows, not their caption buttons.
+    private void ApplyTopSpace()
+    {
+        TopSlots.Padding = _dock.IsHorizontal ? new Thickness(6, 0, 0, 0) : new Thickness(0, Win32.TitleBarHeight(_hwnd), 0, 0);
+    }
+
     private void ApplyThickness(double railWidth)
     {
+        ApplyTopSpace();
+        // Slots keep the rail's width but are a little shorter along it, so more fit and the
+        // Settings sidebar has room for its sections between them.
         var slot = Math.Max(24, Math.Round(railWidth - 8));
+        var along = Math.Max(24, Math.Round(slot * 0.84));
+        _slotLength = along;
+        var (iconScale, glyphScale) = RailSettings.Current.IconSize switch { 0 => (0.42, 0.4), 2 => (0.58, 0.54), _ => (0.5, 0.47) };
+        SettingsMenuIcon.FontSize = QuitMenuIcon.FontSize = Math.Round(along * glyphScale);
+        var horizontal = _dock.IsHorizontal;
         foreach (var panel in new[] { TopSlots, BottomSlots })
         {
-            foreach (var child in panel.Children)
+            foreach (var child in Slots(panel))
             {
                 switch (child)
                 {
                     case Button button:
-                        button.Width = button.Height = slot;
-                        if (button.Content is Grid art && art == ArtHost)
+                        button.Width = horizontal ? along : slot;
+                        button.Height = horizontal ? slot : along;
+                        var content = SlotContent(button);
+                        var inner = (content as Grid)?.Children.FirstOrDefault();
+                        if (content is Grid art && art == ArtHost)
                         {
-                            art.Width = art.Height = Math.Round(slot * 0.85);
+                            art.Width = art.Height = Math.Round(along * 0.85);
                             SizeArtwork();
                         }
-                        else if ((button.Content as Viewbox ?? (button.Content as Grid)?.Children.OfType<Viewbox>().FirstOrDefault()) is { } icon)
+                        else if ((content as Viewbox ?? inner as Viewbox) is { } icon)
                         {
-                            icon.Width = icon.Height = Math.Round(slot * (icon.Tag is "logo" ? 0.6 : 0.5));
+                            icon.Width = icon.Height = Math.Round(along * iconScale);
+                        }
+                        else if ((content as FontIcon ?? inner as FontIcon) is { } glyph)
+                        {
+                            glyph.FontSize = Math.Round(along * glyphScale);
                         }
                         break;
                     case Rectangle sep when _dock.IsHorizontal:
                         sep.Width = 1;
                         sep.Height = Math.Round(slot * 0.6);
-                        sep.Margin = new Thickness(4, 0, 4, 0);
+                        sep.Margin = new Thickness(3, 0, 3, 0);
                         break;
                     case Rectangle sep:
                         sep.Width = Math.Round(slot * 0.6);
                         sep.Height = 1;
-                        sep.Margin = new Thickness(0, 4, 0, 4);
+                        sep.Margin = new Thickness(0, 3, 0, 3);
                         break;
                 }
             }
         }
+        UpdateLiveDetails();
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
